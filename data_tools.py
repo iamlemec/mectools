@@ -1,0 +1,286 @@
+# misc data tools
+
+import numpy as np
+import pandas as pd
+import scipy.stats as stats
+import statsmodels.api as sm
+import matplotlib.pylab as plt
+import matplotlib.cm as cm
+
+# statistics
+
+def noinf(s):
+  return s.replace([-np.inf,np.inf],np.nan)
+
+def nonan(s):
+  return s[~np.isnan(s)]
+
+def log(s):
+  return noinf(np.log(s))
+
+def winsorize(s,level=0.05):
+  if type(level) not in (list,tuple):
+    level = (level,1.0-level)
+
+  clipper = lambda s1: s1.clip(lower=s1.quantile(level[0]),upper=s1.quantile(level[1]))
+  if type(s) is pd.Series:
+    return clipper(s)
+  else:
+    return s.apply(clipper)
+
+def mean(s,winsor=False):
+  if winsor: s = winsorize(s)
+  return s.mean()
+
+def std(s,winsor=False):
+  if winsor: s = winsorize(s)
+  return s.std()
+
+def iqr(s,level=0.25):
+  return s.quantile(0.5+level)-s.quantile(0.5-level)
+
+def corr_robust(df,xcol,ycol,wcol=None,winsor=None):
+  if xcol == ycol: return (1.0,0.0)
+
+  all_vars = [xcol,ycol]
+  if wcol is not None: all_vars += [wcol]
+  df1 = df[all_vars].dropna()
+
+  if winsor is not None:
+    df1[[xcol,ycol]] = winsorize(df1[[xcol,ycol]],level=winsor)
+
+  if wcol is None:
+    return stats.pearsonr(df1[xcol],df1[ycol])
+  else:
+    wgt = df1[wcol].astype(np.float)/np.sum(df1[wcol])
+    xmean = np.sum(wgt*df1[xcol])
+    ymean = np.sum(wgt*df1[ycol])
+    xvar = np.sum(wgt*(df1[xcol]-xmean)**2)
+    yvar = np.sum(wgt*(df1[ycol]-ymean)**2)
+    vcov = np.sum(wgt*(df1[xcol]-xmean)*(df1[ycol]-ymean))
+    cval = vcov/np.sqrt(xvar*yvar)
+    nval = len(df1)
+    tval = cval*np.sqrt((nval-2)/(1.0-cval*cval))
+    pval = 2.0*stats.t.sf(np.abs(tval),nval)
+    return (cval,pval)
+
+# data frame tools
+
+def prefixer(sp):
+  return lambda s: sp+s
+
+def postfixer(sp):
+  return lambda s: s+sp
+
+def prefix(sv,sp):
+  return map(prefixer(sp),sv)
+
+def postfix(sv,sp):
+  return map(postfixer(sp),sv)
+
+def stack_frames(dfs,postfixes=None):
+  if postfixes is None:
+    return pd.concat(dfs,axis=1)
+  else:
+    return pd.concat([df.rename(columns=postfixer(pf)) for (df,pf) in zip(dfs,postfixes)],axis=1)
+
+def compact_out(df,min_col_width=10,col_spacing=1):
+  col_spacer = ' '*col_spacing
+  row_name_width = max(min_col_width,max(map(lambda x: len(str(x)),df.index)))
+  col_widths = map(lambda x: max(min_col_width,len(str(x))),df.columns)
+  header_fmt = '{:'+str(row_name_width)+'s}'+col_spacer+'{:>'+('s}'+col_spacer+'{:>').join(map(str,col_widths))+'}'
+  row_fmt = '{:'+str(row_name_width)+'s}'+col_spacer+'{: '+('f}'+col_spacer+'{: ').join(map(str,col_widths))+'f}'
+  print header_fmt.format('',*df.columns)
+  for (i,vs) in df.iterrows(): print row_fmt.format(str(i),*vs.values)
+
+# fix rolling_cov in pandas
+
+def rolling_cov(arg1, arg2, window, center=False):
+  window = min(window, len(arg1), len(arg2))
+
+  mean = lambda x: pd.rolling_mean(x, window, center=center)
+  count = pd.rolling_count(arg1 + arg2, window, center=center)
+  bias_adj = count / (count - 1)
+  return (mean(arg1 * arg2) - mean(arg1) * mean(arg2)) * bias_adj
+
+def rolling_corr(arg1, arg2, window, center=False):
+  num = rolling_cov(arg1, arg2, window, center=center)
+  den = pd.rolling_std(arg1, window, center=center) * pd.rolling_std(arg2, window, center=center)
+  return num / den
+
+# butterworth filter
+
+import scipy.signal as sig
+
+def butter_bandpass(lowcut, highcut, fs, order=5):
+  nyq = 0.5*fs
+  low = lowcut/nyq
+  high = highcut/nyq
+  (b,a) = sig.butter(order,[low,high],btype='band')
+  return (b,a)
+
+def butter_bandpass_filter(data,lowcut,highcut,fs=1.0,order=5):
+  (b,a) = butter_bandpass(lowcut,highcut,fs,order=order)
+  y = sig.lfilter(b,a,data)
+  return y
+
+# block filters
+
+# this will drop NaNs but doesn't handle non-uniform series
+def lowpass_filter(data,cutoff,fs=1.0):
+  freqs = np.fft.fftfreq(len(data),d=fs)
+  fftv = np.fft.fft(data)
+  fftv[np.abs(freqs)>=cutoff] = 0.0
+  smooth = np.fft.ifft(fftv)
+  return smooth.real
+
+def bandpass_filter(data,lowcut,highcut,fs=1.0):
+  freqs = np.fft.fftfreq(len(data),d=fs)
+  fftv = np.fft.fft(data)
+  cut_sel = (np.abs(freqs)<=lowcut) | (np.abs(freqs)>=highcut)
+  cut_sel[0] = False
+  fftv[cut_sel] = 0.0
+  smooth = np.fft.ifft(fftv)
+  return smooth.real
+
+# plotting panels
+
+def plot_filter(datf,cols=None,ftype='lowpass',show_orig=True,fargs=[],fkwargs={},pargs=[],pkwargs={}):
+  if isinstance(datf,pd.DataFrame):
+    if cols == None: cols = datf.columns
+    datf = datf.filter(cols)
+  else:
+    datf = pd.DataFrame({'value':datf})
+
+  datf = datf.dropna()
+
+  if ftype == 'butter':
+    yfunc = lambda s: butter_bandpass_filter(s,*fargs,**fkwargs)
+  elif ftype == 'lowpass':
+    yfunc = lambda s: lowpass_filter(s,*fargs,**fkwargs)
+  elif ftype == 'bandpass':
+    yfunc = lambda s: bandpass_filter(s,*fargs,**fkwargs)
+  elif ftype == 'smooth':
+    yfunc = lambda s: pd.rolling_mean(s,*fargs,**fkwargs)
+
+  datf_filt = datf.apply(yfunc,axis=0).rename(columns=lambda s: s+'_filt')
+  ax = datf_filt.plot(linewidth=2.0,grid=True,*pargs,**pkwargs)
+  if show_orig:
+    datf.plot(ax=ax,linewidth=0.5,grid=True,*pargs,**pkwargs)
+    step = len(ax.lines)/2
+    for i in range(step): ax.lines[i+step].set_color(ax.lines[i].get_color())
+
+def plot_panel(df,cols=None,detrend=False,norm=False,norm_pos=False,**kwargs):
+  if cols == None: cols = df.columns
+  df_final = df.filter(cols).copy()
+
+  if detrend:
+    df_final = df_final.dropna().apply(sig.detrend)
+
+  if norm:
+    df_final = (df_final-df_final.median())/(df_final.quantile(0.75)-df_final.quantile(0.25))
+  if norm_pos:
+    df_final = df_final/df_final.mean()
+
+  plt.plot(df_final.index,df_final.values,**kwargs)
+  plt.legend(cols,loc='best')
+
+def hist_panel(s,clip=None,**kwargs):
+  s_final = s.dropna().copy()
+
+  if clip != None:
+    s_final = winsorize(s_final,level=clip)
+
+  plt.hist(s_final,**kwargs)
+
+def heatmap(x,y,bins=30,range=None):
+  (heatmap,xedges,yedges) = np.histogram2d(-x,y,bins=bins,range=range)
+  plt.imshow(heatmap,extent=[-xedges[-1],-xedges[0],yedges[0],yedges[-1]],aspect='auto',interpolation='nearest')
+  plt.colorbar()
+
+def heatmap_panel(datf,cols=None,bins=30,range=None):
+  if cols is None: cols = datf.columns
+  (col1,col2) = cols
+  datf = datf.dropna()
+  heatmap(datf[col1],datf[col2],bins=bins,range=range)
+  plt.xlabel(col1)
+  plt.ylabel(col2)
+
+# variable summary
+
+def var_info(datf,var=''):
+  if type(datf) is pd.Series:
+    svar = datf
+  elif type(datf) is pd.DataFrame:
+    svar = datf[var]
+  print svar.describe()
+  svar.hist()
+
+def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05):
+  all_vars = [x_var,y_var]
+  if w_var: all_vars += [w_var]
+  if c_var and not c_var == 'index': all_vars += [c_var]
+
+  datf_sel = datf[all_vars].dropna()
+  if winsor is not None:
+    datf_sel[[x_var,y_var]] = winsorize(datf_sel[[x_var,y_var]],level=winsor)
+
+  if reg_type is None:
+    if w_var is None:
+      reg_type = 'OLS'
+    else:
+      reg_type = 'WLS'
+
+  if x_name is None:
+    x_name = x_var
+  if y_name is None:
+    y_name = y_var
+
+  if x_range is None:
+    x_range = (datf_sel[x_var].quantile(graph_squeeze),datf_sel[x_var].quantile(1.0-graph_squeeze))
+  if y_range is None:
+    y_range = (datf_sel[y_var].quantile(graph_squeeze),datf_sel[y_var].quantile(1.0-graph_squeeze))
+
+  if reg_type == 'WLS':
+    mod = sm.WLS(datf_sel[y_var],sm.add_constant(datf_sel[x_var]),weights=datf_sel[w_var])
+  else: # OLS + others
+    reg_unit = getattr(sm,reg_type)
+    mod = reg_unit(datf_sel[y_var],sm.add_constant(datf_sel[x_var]))
+  res = mod.fit()
+
+  x_vals = np.linspace(x_range[0],x_range[1],128)
+  y_vals = res.predict(sm.add_constant(x_vals))
+
+  (corr,corr_pval) = corr_robust(datf_sel,x_var,y_var,wcol=w_var)
+
+  str_width = max(11,len(x_var))
+  fmt_0 = '{:'+str(str_width)+'s} = {: f}'
+  fmt_1 = '{:'+str(str_width)+'s} = {: f} ({:f})'
+  print fmt_0.format('constant',res.params[1])
+  print fmt_1.format(x_var,res.params[0],res.pvalues[0])
+  print fmt_1.format('correlation',corr,corr_pval)
+  #print fmt_0.format('R-squared',res.rsquared)
+
+  if w_var:
+    wgt_norm = datf_sel[w_var]
+    wgt_norm /= np.mean(wgt_norm)
+  else:
+    wgt_norm = np.ones_like(datf_sel[x_var])
+
+  if c_var == 'index':
+    idx_norm = datf_sel.index.values.astype(np.float)
+  else:
+    idx_norm = datf_sel[c_var].values.astype(np.float)
+  idx_norm -= np.mean(idx_norm)
+  idx_norm /= 2.0*np.std(idx_norm)
+  idx_norm = (idx_norm/2.0) + 1.0
+
+  (fig,ax) = plt.subplots()
+  ax.scatter(datf_sel[x_var],datf_sel[y_var],s=20.0*size_scale*wgt_norm,color=cm.Blues(0.1+0.6*idx_norm),alpha=0.8)
+  ax.plot(x_vals,y_vals,color='r',linewidth=1.0,alpha=0.7)
+  ax.set_xlim(x_range)
+  ax.set_ylim(y_range)
+  ax.set_xlabel(x_name)
+  ax.set_ylabel(y_name)
+
+  return res
