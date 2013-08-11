@@ -48,7 +48,7 @@ class Bundle(object):
     return Bundle(self,sub=sub)
 
   def to_dataframe(self,sub=None):
-    if sub is None: sub = d.keys()
+    if sub is None: sub = self.__dict__.keys()
     return pd.DataFrame(self.subset(sub).dict())
 
   def copy(self):

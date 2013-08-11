@@ -39,6 +39,18 @@ def std(s,winsor=False):
 def iqr(s,level=0.25):
   return s.quantile(0.5+level)-s.quantile(0.5-level)
 
+def quantile(s,p):
+  if type(s) is pd.Series:
+    return s.quantile(p)
+  else:
+    return stats.scoreatpercentile(s,100.0*p)
+
+def v_range(vec,squeeze=0.0):
+  if type(squeeze) in (list,tuple):
+    return (quantile(vec,squeeze[0]),quantile(vec,squeeze[1]))
+  else:
+    return (quantile(vec,squeeze),quantile(vec,1.0-squeeze))
+
 def corr_robust(df,xcol,ycol,wcol=None,winsor=None):
   if xcol == ycol: return (1.0,0.0)
 
@@ -216,7 +228,7 @@ def var_info(datf,var=''):
   print svar.describe()
   svar.hist()
 
-def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05):
+def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8):
   all_vars = [x_var,y_var]
   if w_var: all_vars += [w_var]
   if c_var and not c_var == 'index': all_vars += [c_var]
@@ -231,15 +243,11 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
     else:
       reg_type = 'WLS'
 
-  if x_name is None:
-    x_name = x_var
-  if y_name is None:
-    y_name = y_var
+  if x_name is None: x_name = x_var
+  if y_name is None: y_name = y_var
 
-  if x_range is None:
-    x_range = (datf_sel[x_var].quantile(graph_squeeze),datf_sel[x_var].quantile(1.0-graph_squeeze))
-  if y_range is None:
-    y_range = (datf_sel[y_var].quantile(graph_squeeze),datf_sel[y_var].quantile(1.0-graph_squeeze))
+  if x_range is None: x_range = v_range(datf_sel[x_var],graph_squeeze)
+  if y_range is None: y_range = v_range(datf_sel[y_var],graph_squeeze)
 
   if reg_type == 'WLS':
     mod = sm.WLS(datf_sel[y_var],sm.add_constant(datf_sel[x_var]),weights=datf_sel[w_var])
@@ -267,16 +275,21 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
   else:
     wgt_norm = np.ones_like(datf_sel[x_var])
 
-  if c_var == 'index':
-    idx_norm = datf_sel.index.values.astype(np.float)
+  if c_var is not None:
+    if c_var == 'index':
+      idx_norm = datf_sel.index.values.astype(np.float)
+    else:
+      idx_norm = datf_sel[c_var].values.astype(np.float)
   else:
-    idx_norm = datf_sel[c_var].values.astype(np.float)
+    idx_norm = np.ones(len(datf_sel))
   idx_norm -= np.mean(idx_norm)
-  idx_norm /= 2.0*np.std(idx_norm)
+  idx_std = np.std(idx_norm)
+  if idx_std > 0.0:
+    idx_norm /= 2.0*np.std(idx_norm)
   idx_norm = (idx_norm/2.0) + 1.0
 
   (fig,ax) = plt.subplots()
-  ax.scatter(datf_sel[x_var],datf_sel[y_var],s=20.0*size_scale*wgt_norm,color=cm.Blues(0.1+0.6*idx_norm),alpha=0.8)
+  ax.scatter(datf_sel[x_var],datf_sel[y_var],s=20.0*size_scale*wgt_norm,color=cm.Blues(0.1+0.6*idx_norm),alpha=alpha)
   ax.plot(x_vals,y_vals,color='r',linewidth=1.0,alpha=0.7)
   ax.set_xlim(x_range)
   ax.set_ylim(y_range)
@@ -284,3 +297,16 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
   ax.set_ylabel(y_name)
 
   return res
+
+def kernel_density_2d(datf,x_var,y_var,x_range=None,y_range=None,graph_squeeze=0.05,log=False,scatter=False,N=64):
+  datf_sel = datf[[x_var,y_var]].dropna()
+  if x_range is None: x_range = v_range(datf_sel[x_var],graph_squeeze)
+  if y_range is None: y_range = v_range(datf_sel[y_var],graph_squeeze)
+
+  gauss_pdf = stats.kde.gaussian_kde(datf_sel.values.T)
+  z_mesh = np.mgrid[x_range[0]:x_range[1]:N*1j,y_range[0]:y_range[1]:N*1j].reshape(2,N*N)
+  z_vals = gauss_pdf(z_mesh).reshape(N,N)
+  if log: z_vals = np.log(z_vals)
+  if scatter: plt.scatter(datf_sel[x_var],datf_sel[y_var],alpha=0.5,color='white')
+  plt.imshow(z_vals,origin='lower',aspect='auto',extent=[z_mesh[0,:].min(),z_mesh[0,:].max(),z_mesh[1,:].min(),z_mesh[1,:].max()])
+  plt.set_cmap(cm.jet)
