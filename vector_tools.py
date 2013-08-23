@@ -47,9 +47,16 @@ class Bundle(object):
   def subset(self,sub):
     return Bundle(self,sub=sub)
 
+  def drop(self,sub):
+    return Bundle(self,sub=list(set(self.keys())-set(sub)))
+
   def to_dataframe(self,sub=None):
     if sub is None: sub = self.__dict__.keys()
     return pd.DataFrame(self.subset(sub).dict())
+
+  def to_series(self,sub=None):
+    if sub is None: sub = self.__dict__.keys()
+    return pd.Series(self.subset(sub).dict())
 
   def copy(self):
     return Bundle(self)
@@ -135,6 +142,48 @@ def digitize_mat(x,bins):
   for i in range(nbins-1,-1,-1):
     outv[x<bins[i,:]] = i
   return outv
+
+# generate continuous rv by linearly interpolating using cmf approximations (columns of probs)
+# last row should be all ones
+def random_panel(probs,vals,interp=False):
+  (nbins,nf) = probs.shape
+  assert((np.log2(nbins)%1.0)==0.0) # only powers of two
+  assert(vals.shape==(nbins,))
+
+  x = np.random.rand(nf)
+  bstep = nbins/2
+  bpos = np.zeros(nf,dtype=np.int)
+  while bstep >= 1:
+    bcmp = bpos + bstep
+    bpos[x>probs[bcmp,range(nf)]] += bstep
+    bstep /= 2
+
+  if interp:
+    xbin = x*nbins-bpos
+    return (1.0-xbin)*vals[bpos] + xbin*vals[bpos+1]
+  else:
+    return vals[bpos]
+
+# generate continuous rv by linearly interpolating using cmf approximations
+# last element should be all ones
+def random_vec(probs,vals,nf):
+  (nbins,) = probs.shape
+  assert((np.log2(nbins)%1.0)==0.0) # only powers of two
+  assert(vals.shape==(nbins,))
+
+  x = np.random.rand(nf)
+  bstep = nbins/2
+  bpos = np.zeros(nf,dtype=np.int)
+  while bstep >= 1:
+    bcmp = bpos + bstep
+    bpos[x>probs[bcmp]] += bstep
+    bstep /= 2
+
+  if interp:
+    xbin = x*nbins-bpos
+    return (1.0-xbin)*vals[bpos] + xbin*vals[bpos+1]
+  else:
+    return vals[bpos]
 
 def find(v):
   return np.nonzero(v)[0]
