@@ -32,6 +32,9 @@ class Bundle(object):
   def keys(self):
     return self.__dict__.keys()
 
+  def values(self):
+    return self.__dict__.values()
+
   def __getitem__(self,name):
     if type(name) is list:
       return Bundle(self.__dict__,sub=name)
@@ -44,19 +47,23 @@ class Bundle(object):
   def dict(self):
     return self.__dict__
 
+  def get(self,key,**kwargs):
+    return self.__dict__.get(key,**kwargs)
+
   def subset(self,sub):
     return Bundle(self,sub=sub)
 
   def drop(self,sub):
     return Bundle(self,sub=list(set(self.keys())-set(sub)))
 
-  def to_dataframe(self,sub=None):
-    if sub is None: sub = self.__dict__.keys()
-    return pd.DataFrame(self.subset(sub).dict())
+  def to_dataframe(self):
+    return pd.DataFrame(self.__dict__)
 
-  def to_series(self,sub=None):
-    if sub is None: sub = self.__dict__.keys()
-    return pd.Series(self.subset(sub).dict())
+  def to_series(self):
+    return pd.Series(self.__dict__)
+
+  def to_json(self,**kwargs):
+    return json.dumps(self.__dict__,**kwargs)
 
   def copy(self):
     return Bundle(self)
@@ -75,6 +82,9 @@ def stack_bundles(bund_vec,agg_func=np.concatenate):
 # param set tools
 def load_json(fname):
   return json.load(open(fname))
+
+def save_json(d,fname):
+  json.dump(d,open(fname,'w+'),indent=4)
 
 def bundle_recurse(d):
   b = Bundle(d)
