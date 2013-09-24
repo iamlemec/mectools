@@ -6,6 +6,7 @@ import scipy.interpolate as interp
 import copy
 import operator
 import pandas as pd
+import collections
 
 # dictionary
 class Bundle(object):
@@ -62,8 +63,16 @@ class Bundle(object):
   def to_series(self):
     return pd.Series(self.__dict__)
 
-  def to_json(self,**kwargs):
-    return json.dumps(self.__dict__,**kwargs)
+  def to_array(self):
+    return np.array(self.values()).transpose()
+
+  def to_json(self,file_name=None,**kwargs):
+    od = collections.OrderedDict(sorted(self))
+    if file_name is not None:
+      kwargs['indent'] = 4
+      json.dump(od,open(file_name,'w+'),**kwargs)
+    else:
+      return json.dumps(od,**kwargs)
 
   def copy(self):
     return Bundle(self)
@@ -164,7 +173,7 @@ def random_panel(probs,vals,interp=False):
   bstep = nbins/2
   bpos = np.zeros(nf,dtype=np.int)
   while bstep >= 1:
-    bcmp = bpos + bstep
+    bcmp = bpos+bstep-1
     bpos[x>probs[bcmp,range(nf)]] += bstep
     bstep /= 2
 
@@ -230,5 +239,9 @@ class UnivariateSpline(interp.UnivariateSpline):
       return super(UnivariateSpline,self).__call__(x,**kwargs)
 
 def movingaverage(interval, window_size):
-    window = np.ones(int(window_size))/float(window_size)
-    return np.convolve(interval, window, 'same')
+  window = np.ones(int(window_size))/float(window_size)
+  return np.convolve(interval, window, 'same')
+
+def push_index(df,vals):
+  df.index = vals
+  return df

@@ -6,6 +6,8 @@ import scipy.stats as stats
 import statsmodels.api as sm
 import matplotlib.pylab as plt
 import matplotlib.cm as cm
+import patsy
+import vincent
 
 # statistics
 
@@ -45,6 +47,10 @@ def quantile(s,p):
   else:
     return stats.scoreatpercentile(s,100.0*p)
 
+def digitize(x,bins):
+  if len(x) == 0: return np.array([],dtype=np.int)
+  return np.digitize(x,bins)
+
 def v_range(vec,squeeze=0.0):
   if type(squeeze) in (list,tuple):
     return (quantile(vec,squeeze[0]),quantile(vec,squeeze[1]))
@@ -76,6 +82,11 @@ def corr_robust(df,xcol,ycol,wcol=None,winsor=None):
     pval = 2.0*stats.t.sf(np.abs(tval),nval)
     return (cval,pval)
 
+def gini(x):
+  N = len(x)
+  B = np.sum(np.arange(N,0,-1)*np.sort(x))/(N*np.sum(x))
+  return 1.0+(1.0/N)-2.0*B
+
 # data frame tools
 
 def prefixer(sp):
@@ -90,11 +101,16 @@ def prefix(sv,sp):
 def postfix(sv,sp):
   return map(postfixer(sp),sv)
 
-def stack_frames(dfs,postfixes=None):
+def stack_frames(dfs,prefixes=None,postfixes=None):
+  if prefixes is None:
+    prefixes = len(dfs)*['']
+  elif type(prefixes) not in (tuple,list):
+    prefixes = len(dfs)*[prefixes]
   if postfixes is None:
-    return pd.concat(dfs,axis=1)
-  else:
-    return pd.concat([df.rename(columns=postfixer(pf)) for (df,pf) in zip(dfs,postfixes)],axis=1)
+    postfixes = len(dfs)*['']
+  elif type(postfixes) not in (tuple,list):
+    postfixes = len(dfs)*[postfixes]
+  return pd.concat([df.rename(columns=prefixer(pre)).rename(columns=postfixer(post)) for (df,pre,post) in zip(dfs,prefixes,postfixes)],axis=1)
 
 def compact_out(df,min_col_width=10,col_spacing=1):
   col_spacer = ' '*col_spacing
@@ -310,3 +326,25 @@ def kernel_density_2d(datf,x_var,y_var,x_range=None,y_range=None,graph_squeeze=0
   if scatter: plt.scatter(datf_sel[x_var],datf_sel[y_var],alpha=0.5,color='white')
   plt.imshow(z_vals,origin='lower',aspect='auto',extent=[z_mesh[0,:].min(),z_mesh[0,:].max(),z_mesh[1,:].min(),z_mesh[1,:].max()])
   plt.set_cmap(cm.jet)
+
+def datf_eval(datf,formula,use_numpy=True):
+  if use_numpy: globs = {'np':np}
+  return eval(formula,globs,datf)
+
+def datf_plot(x_vars,y_vars,data,shape=(1,1),figargs={},axargs=None):
+  if type(x_vars) is not list: x_vars = [x_vars]
+  if type(y_vars) is not list: y_vars = [y_vars]
+
+  (nrows,ncols) = shape
+  n_plots = len(x_vars)
+  if axargs is None: axargs = n_plots*[{}]
+
+  (fig,axs) = plt.subplots(nrows,ncols,**figargs)
+  if type(axs) is not np.ndarray: axs = (axs,)
+  axs = axs[:n_plots]
+
+  for (ax,xv,yv,args) in zip(axs,x_vars,y_vars,axargs):
+    if type(yv) is not list: yv = [yv]
+    x_data = datf_eval(data,xv)
+    y_data = np.vstack([datf_eval(data,yvp) for yvp in yv]).T
+    ax.plot(x_data,y_data,**args)
