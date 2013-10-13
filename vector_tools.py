@@ -78,7 +78,7 @@ class Bundle(object):
     return Bundle(self)
 
   def deepcopy(self):
-    b = Bundle(copy.deepcopy(self.__dict__))
+    return Bundle(copy.deepcopy(self.__dict__))
 
 # filter dict keys
 def filter(d,keys):
