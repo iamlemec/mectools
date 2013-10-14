@@ -244,7 +244,7 @@ def var_info(datf,var=''):
   print svar.describe()
   svar.hist()
 
-def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8):
+def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8,color_skew=0.5):
   all_vars = [x_var,y_var]
   if w_var: all_vars += [w_var]
   if c_var and not c_var == 'index': all_vars += [c_var]
@@ -302,10 +302,12 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
   idx_std = np.std(idx_norm)
   if idx_std > 0.0:
     idx_norm /= 2.0*np.std(idx_norm)
-  idx_norm = (idx_norm/2.0) + 1.0
+  idx_norm = color_skew*idx_norm + 1.0
+  color_args = 0.1 + 0.6*idx_norm
+  color_vals = cm.Blues(color_args)
 
   (fig,ax) = plt.subplots()
-  ax.scatter(datf_sel[x_var],datf_sel[y_var],s=20.0*size_scale*wgt_norm,color=cm.Blues(0.1+0.6*idx_norm),alpha=alpha)
+  ax.scatter(datf_sel[x_var],datf_sel[y_var],s=20.0*size_scale*wgt_norm,color=color_vals,alpha=alpha)
   ax.plot(x_vals,y_vals,color='r',linewidth=1.0,alpha=0.7)
   ax.set_xlim(x_range)
   ax.set_ylim(y_range)
