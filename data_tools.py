@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 import statsmodels.api as sm
+import matplotlib as mpl
 import matplotlib.pylab as plt
 import matplotlib.cm as cm
 import patsy
@@ -244,7 +245,7 @@ def var_info(datf,var=''):
   print svar.describe()
   svar.hist()
 
-def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8,color_skew=0.5):
+def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,title='',reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8,color_skew=0.5,fontsize=None):
   all_vars = [x_var,y_var]
   if w_var: all_vars += [w_var]
   if c_var and not c_var == 'index': all_vars += [c_var]
@@ -311,10 +312,62 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
   ax.plot(x_vals,y_vals,color='r',linewidth=1.0,alpha=0.7)
   ax.set_xlim(x_range)
   ax.set_ylim(y_range)
-  ax.set_xlabel(x_name)
-  ax.set_ylabel(y_name)
+  ax.set_xlabel(x_name,fontsize=fontsize)
+  ax.set_ylabel(y_name,fontsize=fontsize)
+  ax.set_title(title,fontsize=fontsize)
 
   return res
+
+def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=None,y_ranges=None,legends=None,legend_locs=None,figsize=(4,3.5),file_name=None,show_graphs=True,pcmd='plot',extra_args={}):
+  plt.interactive(show_graphs)
+
+  if pcmd == 'bar':
+    color_cycle = mpl.rcParams['axes.color_cycle']
+    def pfun(ax,x_data,y_data,**kwargs):
+      n_series = len(y_data.T)
+      tot_width = np.ptp(x_data)
+      width = float(tot_width)/len(x_data)/n_series
+      for (i,y_series) in enumerate(y_data.T):
+        ax.bar(x_data+(i-float(n_series)/2)*width,y_series,width,**dict({'color':color_cycle[i]},**kwargs))
+  else:
+    def pfun(ax,x_data,y_data,**kwargs):
+      getattr(ax,pcmd)(x_data,y_data,**kwargs)
+
+  n_plots = len(y_vars)
+  if y_names is None: y_names = n_plots*[None]
+  if y_ranges is None: y_ranges = n_plots*[None]
+  if legends is None: legends = n_plots*[None]
+  if legend_locs is None: legend_locs = n_plots*[None]
+
+  if type(x_vars) is not list: x_vars = n_plots*[x_vars]
+  if type(x_names) is not list: x_names = n_plots*[x_names]
+  if type(x_ranges) is not list: x_ranges = n_plots*[x_ranges]
+  if type(extra_args) is not list: extra_args = n_plots*[extra_args]
+
+  (rows,cols) = shape
+  figx0,figy0 = figsize
+  (figx,figy) = (figx0*cols,figy0*rows)
+  (fig,axlist) = plt.subplots(rows,cols,figsize=(figx,figy))
+  axlist = axlist.flatten()[:n_plots]
+  for (xv,yv,xn,yn,xr,yr,lg,ll,ax,ea) in zip(x_vars,y_vars,x_names,y_names,x_ranges,y_ranges,legends,legend_locs,axlist,extra_args):
+    x_data = eqvars[xv]
+    if type(yv) is not list: yv = [yv]
+    y_data = np.array([eqvars[yv1] for yv1 in yv]).T
+    pfun(ax,x_data,y_data,**ea)
+    ax.locator_params(nbins=7)
+    if xn is not None: ax.set_xlabel(xn)
+    if xr is not None: ax.set_xlim(xr)
+    if yn is not None: ax.set_title(yn)
+    if yr is not None: ax.set_ylim(yr)
+    if lg is not None: ax.legend(lg,loc=ll if ll is not None else 'best')
+
+  fig.subplots_adjust(bottom=0.15)
+
+  if file_name is not None:
+    plt.savefig(file_name)
+
+  if not show_graphs:
+    plt.close()
 
 def kernel_density_2d(datf,x_var,y_var,x_range=None,y_range=None,graph_squeeze=0.05,log=False,scatter=False,N=64):
   datf_sel = datf[[x_var,y_var]].dropna()
@@ -350,3 +403,23 @@ def datf_plot(x_vars,y_vars,data,shape=(1,1),figargs={},axargs=None):
     x_data = datf_eval(data,xv)
     y_data = np.vstack([datf_eval(data,yvp) for yvp in yv]).T
     ax.plot(x_data,y_data,**args)
+
+# LaTeX Tables
+def make_table(format,col_fmts,col_names,col_data,caption='',label='',figure=False):
+  col_fmts = ['{:'+cf+'}' for cf in col_fmts]
+  col_data = [[cf.format(v) for v in cd] for (cf,cd) in zip(col_fmts,col_data)]
+  tcode = ''
+  if figure:
+    tcode += '\\begin{table}[ht]\n'
+    tcode += '\\caption{'+caption+'}\n'
+    tcode += '\\label{'+label+'}\n'
+  tcode += '\\begin{center}\n'
+  tcode += '\\begin{tabular}{'+format+'} \\hline\n'
+  tcode += ' & '.join(['\\textbf{'+cn+'}' for cn in col_names])+' \\\\ \\hline\n'
+  for row in zip(*col_data): tcode += ' & '.join(row)+' \\\\'+'\n'
+  tcode = tcode[:-3]+'\n'
+  tcode += '\\end{tabular}\n'
+  tcode += '\\end{center}'
+  if figure:
+    tcode += '\n\\end{table}'
+  return tcode
