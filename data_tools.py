@@ -1,5 +1,6 @@
 # misc data tools
 
+import operator as op
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
@@ -7,8 +8,8 @@ import statsmodels.api as sm
 import matplotlib as mpl
 import matplotlib.pylab as plt
 import matplotlib.cm as cm
+import seaborn as sns
 import patsy
-import vincent
 
 # statistics
 
@@ -245,7 +246,7 @@ def var_info(datf,var=''):
   print svar.describe()
   svar.hist()
 
-def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,title='',reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8,color_skew=0.5,fontsize=None):
+def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,title='',reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8,color_skew=0.5,fontsize=None,style=None,palette=None,despine=None,grid=None):
   all_vars = [x_var,y_var]
   if w_var: all_vars += [w_var]
   if c_var and not c_var == 'index': all_vars += [c_var]
@@ -266,11 +267,13 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
   if x_range is None: x_range = v_range(datf_sel[x_var],graph_squeeze)
   if y_range is None: y_range = v_range(datf_sel[y_var],graph_squeeze)
 
+  datf_regy = datf_sel[y_var]
+  datf_regx = sm.add_constant(datf_sel[[x_var]])
   if reg_type == 'WLS':
-    mod = sm.WLS(datf_sel[y_var],sm.add_constant(datf_sel[x_var]),weights=datf_sel[w_var])
+    mod = sm.WLS(datf_regy,datf_regx,weights=datf_sel[w_var])
   else: # OLS + others
     reg_unit = getattr(sm,reg_type)
-    mod = reg_unit(datf_sel[y_var],sm.add_constant(datf_sel[x_var]))
+    mod = reg_unit(datf_regy,datf_regx)
   res = mod.fit()
 
   x_vals = np.linspace(x_range[0],x_range[1],128)
@@ -307,6 +310,8 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
   color_args = 0.1 + 0.6*idx_norm
   color_vals = cm.Blues(color_args)
 
+  if style: sns.set_style(style)
+  if palette: sns.set_palette(palette)
   (fig,ax) = plt.subplots()
   ax.scatter(datf_sel[x_var],datf_sel[y_var],s=20.0*size_scale*wgt_norm,color=color_vals,alpha=alpha)
   ax.plot(x_vals,y_vals,color='r',linewidth=1.0,alpha=0.7)
@@ -315,10 +320,12 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
   ax.set_xlabel(x_name,fontsize=fontsize)
   ax.set_ylabel(y_name,fontsize=fontsize)
   ax.set_title(title,fontsize=fontsize)
+  if despine: sns.despine(fig,ax)
+  if grid: ax.grid(grid)
 
-  return res
+  return (fig,ax,res)
 
-def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=None,y_ranges=None,legends=None,legend_locs=None,figsize=(4,3.5),file_name=None,show_graphs=True,pcmd='plot',extra_args={}):
+def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=None,y_ranges=None,legends=None,legend_locs=None,figsize=(4,3.5),fontsize=None,file_name=None,show_graphs=True,pcmd='plot',extra_args={}):
   plt.interactive(show_graphs)
 
   if pcmd == 'bar':
@@ -355,9 +362,9 @@ def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=Non
     y_data = np.array([eqvars[yv1] for yv1 in yv]).T
     pfun(ax,x_data,y_data,**ea)
     ax.locator_params(nbins=7)
-    if xn is not None: ax.set_xlabel(xn)
+    if xn is not None: ax.set_xlabel(xn,fontsize=fontsize)
     if xr is not None: ax.set_xlim(xr)
-    if yn is not None: ax.set_title(yn)
+    if yn is not None: ax.set_title(yn,fontsize=fontsize)
     if yr is not None: ax.set_ylim(yr)
     if lg is not None: ax.legend(lg,loc=ll if ll is not None else 'best')
 
@@ -423,3 +430,9 @@ def make_table(format,col_fmts,col_names,col_data,caption='',label='',figure=Fal
   if figure:
     tcode += '\n\\end{table}'
   return tcode
+
+# sqlite tools
+
+def unfurl(ret,idx=[0]):
+  if type(idx) != list: idx = [idx]
+  return op.itemgetter(*idx)(zip(*ret))

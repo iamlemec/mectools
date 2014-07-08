@@ -84,6 +84,13 @@ class Bundle(object):
 def filter(d,keys):
   return {k:d[k] for k in keys}
 
+# map with dict/func
+def map(d,keys):
+  if type(d) is dict:
+    return [d[k] for k in keys]
+  else:
+    return map(d,keys)
+
 # must have same keys
 def stack_bundles(bund_vec,agg_func=np.concatenate):
   return Bundle({k:agg_func([b[k] for b in bund_vec]) for k in bund_vec[0].keys()})
