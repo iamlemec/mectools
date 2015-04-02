@@ -246,7 +246,7 @@ def var_info(datf,var=''):
   print svar.describe()
   svar.hist()
 
-def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,title='',reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8,color_skew=0.5,fontsize=None,style=None,palette=None,despine=None,grid=None):
+def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,title='',reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8,color_skew=0.5,style=None,palette=None,despine=None,grid=None):
   all_vars = [x_var,y_var]
   if w_var: all_vars += [w_var]
   if c_var and not c_var == 'index': all_vars += [c_var]
@@ -284,8 +284,8 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
   str_width = max(11,len(x_var))
   fmt_0 = '{:'+str(str_width)+'s} = {: f}'
   fmt_1 = '{:'+str(str_width)+'s} = {: f} ({:f})'
-  print fmt_0.format('constant',res.params[1])
-  print fmt_1.format(x_var,res.params[0],res.pvalues[0])
+  print fmt_0.format('constant',res.params['const'])
+  print fmt_1.format(x_var,res.params[x_var],res.pvalues[x_var])
   print fmt_1.format('correlation',corr,corr_pval)
   #print fmt_0.format('R-squared',res.rsquared)
 
@@ -312,14 +312,14 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
 
   if style: sns.set_style(style)
   if palette: sns.set_palette(palette)
-  (fig,ax) = plt.subplots()
+  (fig,ax) = plt.subplots(figsize=(7,5))
   ax.scatter(datf_sel[x_var],datf_sel[y_var],s=20.0*size_scale*wgt_norm,color=color_vals,alpha=alpha)
   ax.plot(x_vals,y_vals,color='r',linewidth=1.0,alpha=0.7)
   ax.set_xlim(x_range)
   ax.set_ylim(y_range)
-  ax.set_xlabel(x_name,fontsize=fontsize)
-  ax.set_ylabel(y_name,fontsize=fontsize)
-  ax.set_title(title,fontsize=fontsize)
+  ax.set_xlabel(x_name)
+  ax.set_ylabel(y_name)
+  ax.set_title(title)
   if despine: sns.despine(fig,ax)
   if grid: ax.grid(grid)
 
