@@ -312,14 +312,14 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
 
   if style: sns.set_style(style)
   if palette: sns.set_palette(palette)
-  (fig,ax) = plt.subplots()
+  (fig,ax) = plt.subplots(figsize=(7,5))
   ax.scatter(datf_sel[x_var],datf_sel[y_var],s=20.0*size_scale*wgt_norm,color=color_vals,alpha=alpha)
   ax.plot(x_vals,y_vals,color='r',linewidth=1.0,alpha=0.7)
   ax.set_xlim(x_range)
   ax.set_ylim(y_range)
-  ax.set_xlabel(x_name,fontsize=fontsize)
-  ax.set_ylabel(y_name,fontsize=fontsize)
-  ax.set_title(title,fontsize=fontsize)
+  ax.set_xlabel(x_name)
+  ax.set_ylabel(y_name)
+  ax.set_title(title)
   if despine: sns.despine(fig,ax)
   if grid: ax.grid(grid)
 
