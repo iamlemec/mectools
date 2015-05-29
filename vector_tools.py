@@ -1,4 +1,4 @@
-# agg_risk tools
+# general vector tools
 
 import json
 import numpy as np
@@ -150,6 +150,7 @@ def disc_diff2_d1(vec,size,width):
 # for an increasing function
 bs_tol = 1e-12
 def binsearch_vec(fun,xmin,xmax,max_iter=64,output=False):
+  """Find zeros of a vector of increasing functions."""
   x0 = xmin.copy()
   x1 = xmax.copy()
   xp = 0.5*(x0+x1)
