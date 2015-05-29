@@ -26,6 +26,7 @@ class Bundle(object):
     if sub is None: sub = d.keys()
     for k in sub:
       setattr(self,k,d[k])
+    return self
 
   def items(self):
     return self.__dict__.items()
@@ -92,12 +93,15 @@ def map(d,keys):
     return map(d,keys)
 
 # must have same keys
-def stack_bundles(bund_vec,agg_func=np.concatenate):
+def stack_bundles(bund_vec,agg_func=np.array):
   return Bundle({k:agg_func([b[k] for b in bund_vec]) for k in bund_vec[0].keys()})
 
 # param set tools
-def load_json(fname):
-  return json.load(open(fname))
+def load_json(fname,ordered=False):
+  if ordered:
+    return json.load(open(fname),object_pairs_hook=collections.OrderedDict)
+  else:
+    return json.load(open(fname))
 
 def save_json(d,fname):
   json.dump(d,open(fname,'w+'),indent=4)

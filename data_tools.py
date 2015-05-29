@@ -14,7 +14,8 @@ import patsy
 # statistics
 
 def noinf(s):
-  return s.replace([-np.inf,np.inf],np.nan)
+  s[np.isinf(s)] = np.nan
+  return s
 
 def nonan(s):
   return s[~np.isnan(s)]
@@ -362,9 +363,9 @@ def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=Non
     y_data = np.array([eqvars[yv1] for yv1 in yv]).T
     pfun(ax,x_data,y_data,**ea)
     ax.locator_params(nbins=7)
-    if xn is not None: ax.set_xlabel(xn,fontsize=fontsize)
+    if xn is not None: ax.set_xlabel(xn)
     if xr is not None: ax.set_xlim(xr)
-    if yn is not None: ax.set_title(yn,fontsize=fontsize)
+    if yn is not None: ax.set_title(yn)
     if yr is not None: ax.set_ylim(yr)
     if lg is not None: ax.legend(lg,loc=ll if ll is not None else 'best')
 
