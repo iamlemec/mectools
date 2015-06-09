@@ -321,6 +321,7 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
   ax.set_xlabel(x_name)
   ax.set_ylabel(y_name)
   ax.set_title(title)
+  fig.subplots_adjust(bottom=0.15)
   if despine: sns.despine(fig,ax)
   if grid: ax.grid(grid)
 
