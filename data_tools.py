@@ -1,6 +1,7 @@
 # misc data tools
 
 import operator as op
+import collections as co
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
@@ -121,8 +122,8 @@ def compact_out(df,min_col_width=10,col_spacing=1):
   col_widths = map(lambda x: max(min_col_width,len(str(x))),df.columns)
   header_fmt = '{:'+str(row_name_width)+'s}'+col_spacer+'{:>'+('s}'+col_spacer+'{:>').join(map(str,col_widths))+'}'
   row_fmt = '{:'+str(row_name_width)+'s}'+col_spacer+'{: '+('f}'+col_spacer+'{: ').join(map(str,col_widths))+'f}'
-  print header_fmt.format('',*df.columns)
-  for (i,vs) in df.iterrows(): print row_fmt.format(str(i),*vs.values)
+  print(header_fmt.format('',*df.columns))
+  for (i,vs) in df.iterrows(): print(row_fmt.format(str(i),*vs.values))
 
 # fix rolling_cov in pandas
 
@@ -244,13 +245,20 @@ def var_info(datf,var=''):
     svar = datf
   elif type(datf) is pd.DataFrame:
     svar = datf[var]
-  print svar.describe()
+  print(svar.describe())
   svar.hist()
 
-def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,title='',reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8,color_skew=0.5,style=None,palette=None,despine=None,grid=None):
+def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,title='',reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8,color_skew=0.5,style=None,palette=None,despine=None,grid=None,logx=False,logy=False,loglog=False):
+  datf = datf.copy()
+
   all_vars = [x_var,y_var]
   if w_var: all_vars += [w_var]
   if c_var and not c_var == 'index': all_vars += [c_var]
+
+  if logx or loglog:
+    datf[x_var] = log(datf[x_var])
+  if logy or loglog:
+    datf[y_var] = log(datf[y_var])
 
   datf_sel = datf[all_vars].dropna()
   if winsor is not None:
@@ -270,25 +278,33 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
 
   datf_regy = datf_sel[y_var]
   datf_regx = sm.add_constant(datf_sel[[x_var]])
-  if reg_type == 'WLS':
-    mod = sm.WLS(datf_regy,datf_regx,weights=datf_sel[w_var])
-  else: # OLS + others
-    reg_unit = getattr(sm,reg_type)
-    mod = reg_unit(datf_regy,datf_regx)
-  res = mod.fit()
 
   x_vals = np.linspace(x_range[0],x_range[1],128)
-  y_vals = res.predict(sm.add_constant(x_vals))
+  xp_vals = sm.add_constant(x_vals)
+
+  if reg_type == 'WLS':
+    mod = sm.WLS(datf_regy,datf_regx,weights=datf_sel[w_var])
+    res = mod.fit()
+    y_vals = res.predict(xp_vals)
+  elif reg_type == 'kernel':
+    mod = sm.nonparametric.KernelReg(datf_regy,datf_regx[x_var],'c')
+    (y_vals,_) = mod.fit(x_vals)
+  else:
+    reg_unit = getattr(sm,reg_type)
+    mod = reg_unit(datf_regy,datf_regx)
+    res = mod.fit()
+    y_vals = res.predict(xp_vals)
 
   (corr,corr_pval) = corr_robust(datf_sel,x_var,y_var,wcol=w_var)
 
-  str_width = max(11,len(x_var))
-  fmt_0 = '{:'+str(str_width)+'s} = {: f}'
-  fmt_1 = '{:'+str(str_width)+'s} = {: f} ({:f})'
-  print fmt_0.format('constant',res.params['const'])
-  print fmt_1.format(x_var,res.params[x_var],res.pvalues[x_var])
-  print fmt_1.format('correlation',corr,corr_pval)
-  #print fmt_0.format('R-squared',res.rsquared)
+  if reg_type != 'kernel':
+    str_width = max(11,len(x_var))
+    fmt_0 = '{:'+str(str_width)+'s} = {: f}'
+    fmt_1 = '{:'+str(str_width)+'s} = {: f} ({:f})'
+    print(fmt_0.format('constant',res.params['const']))
+    print(fmt_1.format(x_var,res.params[x_var],res.pvalues[x_var]))
+    print(fmt_1.format('correlation',corr,corr_pval))
+    #print(fmt_0.format('R-squared',res.rsquared))
 
   if w_var:
     wgt_norm = datf_sel[w_var]
@@ -324,7 +340,10 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
   if despine: sns.despine(fig,ax)
   if grid: ax.grid(grid)
 
-  return (fig,ax,res)
+  if reg_type != 'kernel':
+    return (fig,ax,res)
+  else:
+    return (fig,ax)
 
 def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=None,y_ranges=None,legends=None,legend_locs=None,figsize=(4,3.5),fontsize=None,file_name=None,show_graphs=True,pcmd='plot',extra_args={}):
   plt.interactive(show_graphs)
@@ -437,3 +456,72 @@ def make_table(format,col_fmts,col_names,col_data,caption='',label='',figure=Fal
 def unfurl(ret,idx=[0]):
   if type(idx) != list: idx = [idx]
   return op.itemgetter(*idx)(zip(*ret))
+
+# time series histogram
+def ts_hist(s,agg_type='monthly'):
+  plt.style.use('ggplot')
+
+  import calendar
+  from datetime import datetime
+
+  # find date range
+  values = s.apply(lambda t: (t.year,t.month))
+  min_val = min(values)
+  max_val = max(values)
+
+  # make bins
+  def gen_bins():
+    month_incr = lambda y,m: (y,m+1) if m < 12 else (y+1,1)
+    val = min_val
+    while val != max_val:
+      yield val
+      val = month_incr(*val)
+    yield val
+  bins = list(gen_bins())
+  nbins = len(bins)
+
+  # determine tick stride
+  firstof = lambda m0: min([i for (i,(y,m)) in enumerate(bins) if m == m0])
+  if nbins < 12:
+    stride = 1
+    base = 0
+    show_month = True
+  elif nbins < 24:
+    stride = 2
+    base = 0
+    show_month = True
+  elif nbins < 36:
+    stride = 3
+    base = min([firstof(1),firstof(4),firstof(7),firstof(10)])
+    show_month = True
+  elif nbins < 72:
+    stride = 6
+    base = min([firstof(1),firstof(7)])
+    show_month = True
+  else:
+    stride = 12
+    base = firstof(1)
+    show_month = False
+
+  # bin it up
+  counts = co.OrderedDict([(b,0) for b in bins])
+  for val in values:
+    counts[val] += 1
+
+  # raw plot
+  (fig,ax) = plt.subplots()
+  ax.bar(range(nbins),list(counts.values()))
+  ticks = range(base,nbins,stride)
+  ax.set_xticks(ticks)
+
+  # proper labels
+  fmt = '%b %Y' if show_month else '%Y'
+  labeler = lambda y,m: datetime(y,m,1).strftime(fmt)
+  labels = [labeler(*bins[i]) for i in ticks]
+  ax.set_xticklabels(labels,rotation=45)
+
+  # show it
+  fig.subplots_adjust(bottom=0.17)
+
+  return (fig,ax)
+
