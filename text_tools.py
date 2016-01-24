@@ -1,9 +1,11 @@
 # general text tools
 
+from xml.dom.minidom import parseString
 from sumy.parsers.html import HtmlParser
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lsa import LsaSummarizer
+from sumy.summarizers.lex_rank import LexRankSummarizer
 from sumy.nlp.stemmers import Stemmer
 from sumy.utils import get_stop_words, fetch_url
 
@@ -18,7 +20,7 @@ def summarize_file(path,**kwargs):
     text = open(path).read()
     return summarize(text,**kwargs)
 
-def summarize(text,n=10,lang="english",Parser=PlaintextParser,Summarizer=LsaSummarizer,fill='\n\n'):
+def summarize(text,n=10,lang="english",Parser=PlaintextParser,Summarizer=LexRankSummarizer,fill='\n\n'):
     tokenizer = Tokenizer(lang)
     parser = Parser(text,tokenizer)
     stemmer = Stemmer(lang)
@@ -30,3 +32,6 @@ def summarize(text,n=10,lang="english",Parser=PlaintextParser,Summarizer=LsaSumm
         return fill.join(sentences)
     else:
         return sentences
+
+def print_xml(src,indent='    '):
+    return parseString(src).toprettyxml(indent=indent)

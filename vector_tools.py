@@ -182,12 +182,12 @@ def random_panel(probs,vals,interp=False):
   assert(vals.shape==(nbins,))
 
   x = np.random.rand(nf)
-  bstep = nbins/2
+  bstep = nbins >> 1
   bpos = np.zeros(nf,dtype=np.int)
   while bstep >= 1:
     bcmp = bpos+bstep-1
     bpos[x>probs[bcmp,range(nf)]] += bstep
-    bstep /= 2
+    bstep >>= 1
 
   if interp:
     xbin = x*nbins-bpos
@@ -203,12 +203,12 @@ def random_vec(probs,vals,nf):
   assert(vals.shape==(nbins,))
 
   x = np.random.rand(nf)
-  bstep = nbins/2
+  bstep = nbins >> 1
   bpos = np.zeros(nf,dtype=np.int)
   while bstep >= 1:
     bcmp = bpos + bstep
     bpos[x>probs[bcmp]] += bstep
-    bstep /= 2
+    bstep >> 1
 
   if interp:
     xbin = x*nbins-bpos
