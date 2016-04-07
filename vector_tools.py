@@ -81,6 +81,9 @@ class Bundle(object):
   def deepcopy(self):
     return Bundle(copy.deepcopy(self.__dict__))
 
+def bundle(**kwargs):
+  return Bundle(kwargs)
+
 # filter dict keys
 def filter(d,keys):
   return {k:d[k] for k in keys}
