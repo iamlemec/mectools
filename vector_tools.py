@@ -148,8 +148,23 @@ def disc_diff2_d1(vec,size,width):
   return dvec.flatten()
 
 # for an increasing function
-bs_tol = 1e-12
-def binsearch_vec(fun,xmin,xmax,max_iter=64,output=False):
+def secant_vec(fun,xmin,xmax,max_iter=64,sc_tol=1e-12,output=False):
+  """Find zeros of a vector of increasing functions."""
+  x0 = xmin.copy()
+  x1 = xmax.copy()
+  f0 = fun(x0)
+  f1 = fun(x1)
+  for i in range(max_iter):
+    x0[:] = x1 - f1*((x1-x0)/(f1-f0))
+    f0[:] = fun(x0)
+    (x0,x1) = (x1,x0)
+    (f0,f1) = (f1,f0)
+    if np.max(np.abs(f1)) < sc_tol:
+      break
+  return x1
+
+# for an increasing function
+def binsearch_vec(fun,xmin,xmax,max_iter=64,bs_tol=1e-12,output=False):
   """Find zeros of a vector of increasing functions."""
   x0 = xmin.copy()
   x1 = xmax.copy()
@@ -161,7 +176,8 @@ def binsearch_vec(fun,xmin,xmax,max_iter=64,output=False):
     x0[sel0] = xp[sel0]
     x1[sel1] = xp[sel1]
     xp = 0.5*(x0+x1)
-    if np.max(np.abs(fp)) < bs_tol: break
+    if np.max(np.abs(fp)) < bs_tol:
+      break
   return xp
 
 # x ~ N_firms , bins ~ N_states x N_firms
