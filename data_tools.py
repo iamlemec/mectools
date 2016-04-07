@@ -349,7 +349,7 @@ def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=Non
   plt.interactive(show_graphs)
 
   if pcmd == 'bar':
-    color_cycle = mpl.rcParams['axes.color_cycle']
+    color_cycle = mpl.rcParams['axes.prop_cycle']
     def pfun(ax,x_data,y_data,**kwargs):
       n_series = len(y_data.T)
       tot_width = np.ptp(x_data)
