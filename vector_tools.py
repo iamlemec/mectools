@@ -58,6 +58,9 @@ class Bundle(object):
   def drop(self,sub):
     return Bundle(self,sub=list(set(self.keys())-set(sub)))
 
+  def apply(self,f):
+    return Bundle({k:f(v) for (k,v) in self.__dict__.items()})
+
   def to_dataframe(self):
     return pd.DataFrame(self.__dict__)
 
@@ -68,9 +71,9 @@ class Bundle(object):
     return np.array(self.values()).transpose()
 
   def to_json(self,file_name=None,**kwargs):
+    kwargs['indent'] = 4
     od = collections.OrderedDict(sorted(self))
     if file_name is not None:
-      kwargs['indent'] = 4
       json.dump(od,open(file_name,'w+'),**kwargs)
     else:
       return json.dumps(od,**kwargs)
