@@ -37,9 +37,9 @@ def table_op(tname,schema):
     return wrap
 
 class ChunkInserter:
-    def __init__(self,con,cur,cmd,chunk_size=1000,output=True):
+    def __init__(self,con,cmd,cur=None,chunk_size=1000,output=True):
         self.con = con
-        self.cur = cur
+        self.cur = cur if cur is not None else con.cursor()
         self.cmd = cmd
         self.chunk_size = chunk_size
         self.output = output
