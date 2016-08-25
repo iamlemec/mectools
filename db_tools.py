@@ -54,6 +54,14 @@ class ChunkInserter:
         else:
             return False
 
+    def insertmany(self,args):
+        self.items += args
+        if len(self.items) >= self.chunk_size:
+            self.commit()
+            return True
+        else:
+            return False
+
     def commit(self):
         self.i += 1
         if self.output:
