@@ -238,8 +238,14 @@ def random_vec(probs,vals,nf):
   else:
     return vals[bpos]
 
-def find(v):
-  return np.nonzero(v)[0]
+def find(m,axis=0):
+  d = len(m.shape)
+  n = m.shape[axis]
+  ret = -np.ones([x for (i,x) in enumerate(m.shape) if i != axis],dtype=np.int)
+  for i in range(n):
+    s = [i if j == axis else slice(None) for j in range(d)]
+    ret[(m[s]!=0)&(ret==-1)] = i
+  return ret
 
 def digitize(x,bins):
   if x.shape == (0,):
