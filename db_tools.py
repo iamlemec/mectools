@@ -37,7 +37,7 @@ def table_op(tname,schema):
     return wrap
 
 class ChunkInserter:
-    def __init__(self,con,table=None,cmd=None,cur=None,chunk_size=1000,output=False):
+    def __init__(self, con, table=None, cmd=None, cur=None, chunk_size=1000, output=False):
         if table is None and cmd is None:
             raise('Must specify either table or cmd')
 
@@ -73,10 +73,9 @@ class ChunkInserter:
         if self.cmd is None:
             nargs = len(self.items[0])
             sign = ','.join(nargs*'?')
-            self.cmd = 'insert into %s values (%s)' % (self.table, sign)
+            self.cmd = 'insert or replace into %s values (%s)' % (self.table, sign)
         if self.output:
             print('Committing chunk %d (%d)' % (self.i,len(self.items)))
         self.cur.executemany(self.cmd,self.items)
         self.con.commit()
         self.items = []
-
