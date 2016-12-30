@@ -38,8 +38,8 @@ def summarize(text, n=10, lang="english", Parser=PlaintextParser, Summarizer=Lex
 def print_xml(src, indent='    '):
     return parseString(src).toprettyxml(indent=indent)
 
-def parse_wiki(src, wiki=True):
+def parse_wiki(src, strip=False):
     df = pd.read_html(src)[0]
-    if wiki:
+    if strip:
         df = df.applymap(lambda s: s.split('♠')[-1]) # for sortkey spans in wikitables
     return df
