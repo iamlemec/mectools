@@ -248,55 +248,67 @@ def var_info(datf,var=''):
     print(svar.describe())
     svar.hist()
 
-def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=None,x_name=None,y_name=None,title='',reg_type=None,size_scale=1.0,winsor=None,graph_squeeze=0.05,alpha=0.8,color_skew=0.5,style=None,palette=None,despine=None,grid=None,logx=False,logy=False,loglog=False):
+# pretty flexible dataframe correlation plotter
+def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None, x_range=None, y_range=None, x_name=None, y_name=None, title='', reg_type=None, size_scale=1.0, winsor=None, graph_squeeze=0.05, alpha=0.8, color_skew=0.5, style=None, palette=None, despine=None, grid=None, logx=False, logy=False, loglog=False):
+    # shallow copy
     datf = datf.copy()
 
-    all_vars = [x_var,y_var]
+    # sort out needed columns
+    all_vars = [x_var, y_var]
     if w_var: all_vars += [w_var]
     if c_var and not c_var == 'index': all_vars += [c_var]
 
+    # transformations
     if logx or loglog:
         datf[x_var] = log(datf[x_var])
     if logy or loglog:
         datf[y_var] = log(datf[y_var])
 
+    # select proper rows
     datf_sel = datf[all_vars].dropna()
     if winsor is not None:
-        datf_sel[[x_var,y_var]] = winsorize(datf_sel[[x_var,y_var]],level=winsor)
+        datf_sel[[x_var, y_var]] = winsorize(datf_sel[[x_var, y_var]], level=winsor)
 
+    # regression select
     if reg_type is None:
         if w_var is None:
             reg_type = 'OLS'
         else:
             reg_type = 'WLS'
 
+    # axes labels
     if x_name is None: x_name = x_var
     if y_name is None: y_name = y_var
 
-    if x_range is None: x_range = v_range(datf_sel[x_var],graph_squeeze)
-    if y_range is None: y_range = v_range(datf_sel[y_var],graph_squeeze)
+    # axes ranges
+    if x_range is None: x_range = v_range(datf_sel[x_var], graph_squeeze)
+    if y_range is None: y_range = v_range(datf_sel[y_var], graph_squeeze)
 
+    # regression data
     datf_regy = datf_sel[y_var]
     datf_regx = sm.add_constant(datf_sel[[x_var]])
 
-    x_vals = np.linspace(x_range[0],x_range[1],128)
+    x_vals = np.linspace(x_range[0], x_range[1], 128)
     xp_vals = sm.add_constant(x_vals)
 
+    # execute regression
     if reg_type == 'WLS':
-        mod = sm.WLS(datf_regy,datf_regx,weights=datf_sel[w_var])
+        mod = sm.WLS(datf_regy, datf_regx, weights=datf_sel[w_var])
         res = mod.fit()
         y_vals = res.predict(xp_vals)
     elif reg_type == 'kernel':
-        mod = sm.nonparametric.KernelReg(datf_regy,datf_regx[x_var],'c')
-        (y_vals,_) = mod.fit(x_vals)
+        mod = sm.nonparametric.KernelReg(datf_regy, datf_regx[x_var], 'c')
+        (y_vals, _) = mod.fit(x_vals)
     else:
-        reg_unit = getattr(sm,reg_type)
-        mod = reg_unit(datf_regy,datf_regx)
+        reg_unit = getattr(sm, reg_type)
+        mod = reg_unit(datf_regy, datf_regx)
         res = mod.fit()
         y_vals = res.predict(xp_vals)
 
-    (corr,corr_pval) = corr_robust(datf_sel,x_var,y_var,wcol=w_var)
+    # raw correlations
+    (corr, corr_pval) = corr_robust(datf_sel, x_var, y_var, wcol=w_var)
 
+    # display regression results
     if reg_type != 'kernel':
         str_width = max(11,len(x_var))
         fmt_0 = '{:'+str(str_width)+'s} = {: f}'
@@ -306,12 +318,14 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
         print(fmt_1.format('correlation',corr,corr_pval))
         #print(fmt_0.format('R-squared',res.rsquared))
 
+    # figure out point size
     if w_var:
         wgt_norm = datf_sel[w_var]
         wgt_norm /= np.mean(wgt_norm)
     else:
         wgt_norm = np.ones_like(datf_sel[x_var])
 
+    # calculate point color
     if c_var is not None:
         if c_var == 'index':
             idx_norm = datf_sel.index.values.astype(np.float)
@@ -327,11 +341,21 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
     color_args = 0.1 + 0.6*idx_norm
     color_vals = cm.Blues(color_args)
 
+    # set plot style
     if style: sns.set_style(style)
     if palette: sns.set_palette(palette)
-    (fig,ax) = plt.subplots(figsize=(7,5))
-    ax.scatter(datf_sel[x_var],datf_sel[y_var],s=20.0*size_scale*wgt_norm,color=color_vals,alpha=alpha)
-    ax.plot(x_vals,y_vals,color='r',linewidth=1.0,alpha=0.7)
+
+    # construct axes
+    if ax is None:
+        (fig, ax) = plt.subplots(figsize=(7,5))
+    else:
+        fig = ax.figure
+
+    # execute plots
+    ax.scatter(datf_sel[x_var], datf_sel[y_var], s=20.0*size_scale*wgt_norm, color=color_vals, alpha=alpha)
+    ax.plot(x_vals, y_vals, color='r', linewidth=1.0, alpha=0.7)
+
+    # custom plot styling
     ax.set_xlim(x_range)
     ax.set_ylim(y_range)
     ax.set_xlabel(x_name)
@@ -340,10 +364,11 @@ def corr_info(datf,x_var,y_var,w_var=None,c_var='index',x_range=None,y_range=Non
     if despine: sns.despine(fig,ax)
     if grid: ax.grid(grid)
 
+    # return
     if reg_type != 'kernel':
-        return (fig,ax,res)
+        return (fig, ax, res)
     else:
-        return (fig,ax)
+        return (fig, ax)
 
 def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=None,y_ranges=None,legends=None,legend_locs=None,figsize=(4,3.5),fontsize=None,file_name=None,show_graphs=True,pcmd='plot',extra_args={}):
     plt.interactive(show_graphs)
@@ -451,8 +476,20 @@ def make_table(format,col_fmts,col_names,col_data,caption='',label='',figure=Fal
         tcode += '\n\\end{table}'
     return tcode
 
-def md_table(data):
-    pass
+def md_table(data, align=None, index=False):
+    if align is None:
+        align = 'l'
+    if len(align) == 1:
+        align = align*len(data.columns)
+
+    lalign = [' ' if x == 'r' else ':' for x in align]
+    ralign = [' ' if x == 'l' else ':' for x in align]
+
+    header = '| ' + ' | '.join([str(x) for x in data.columns]) + ' |'
+    hsep = '|' + '|'.join([la+('-'*max(1,len(x)))+ra for (x, la, ra) in zip(data.columns, lalign, ralign)]) + '|'
+    rows = ['| '+' | '.join([str(x) for x in row])+' |' for (i, row) in data.iterrows()]
+
+    return header + '\n' + hsep + '\n' + '\n'.join(rows)
 
 # sqlite tools
 
