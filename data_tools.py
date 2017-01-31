@@ -564,3 +564,20 @@ def ts_hist(s,agg_type='monthly'):
     fig.subplots_adjust(bottom=0.17)
 
     return (fig,ax)
+
+# time series tools
+
+def shift_column(df, col, per=None, val=None, subset=None, suffix='_p'):
+    df1 = df.copy()
+    colp = col + '_xxx'
+    if val is not None:
+        df1[colp] = df[col] + val
+    else:
+        df1[colp] = df[col].shift(per)
+    if subset is None:
+        subset = list(df.columns)
+    if col not in subset:
+        subset += [col]
+    df1 = df1.merge(df1[subset], how='left', left_on=colp, right_on=col, suffixes=('', suffix))
+    df1 = df1.drop([colp, col+'_p'], axis=1)
+    return df1
