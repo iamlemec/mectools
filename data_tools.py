@@ -370,7 +370,7 @@ def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None, x_range=No
     else:
         return (fig, ax)
 
-def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=None,y_ranges=None,legends=None,legend_locs=None,figsize=(4,3.5),fontsize=None,file_name=None,show_graphs=True,pcmd='plot',extra_args={}):
+def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=None,y_ranges=None,legends=None,legend_locs=None,figsize=(5,4.5),fontsize=None,file_name=None,show_graphs=True,pcmd='plot',extra_args={}):
     plt.interactive(show_graphs)
 
     if pcmd == 'bar':
@@ -379,8 +379,8 @@ def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=Non
             n_series = len(y_data.T)
             tot_width = np.ptp(x_data)
             width = float(tot_width)/len(x_data)/n_series
-            for (i,y_series) in enumerate(y_data.T):
-                ax.bar(x_data+(i-float(n_series)/2)*width,y_series,width,**dict({'color':color_cycle[i]},**kwargs))
+            for (i,(cc,y_series)) in enumerate(zip(color_cycle,y_data.T)):
+                ax.bar(x_data+(i-float(n_series)/2)*width,y_series,width,**dict(cc,**kwargs))
     else:
         def pfun(ax,x_data,y_data,**kwargs):
             getattr(ax,pcmd)(x_data,y_data,**kwargs)
@@ -414,6 +414,7 @@ def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=Non
         if lg is not None: ax.legend(lg,loc=ll if ll is not None else 'best')
 
     fig.subplots_adjust(bottom=0.15)
+    fig.tight_layout()
 
     if file_name is not None:
         plt.savefig(file_name)

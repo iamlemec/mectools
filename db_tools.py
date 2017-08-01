@@ -2,13 +2,52 @@
 
 import sqlite3
 
-def tables(cur):
-    ret = cur.execute('select name from sqlite_master where type=\'table\'')
-    print('\n'.join([tn for (tn,) in ret.fetchall()]))
+class Connection:
+    def __init__(self, db=':memory:'):
+        self.db = db
+        self.con = sqlite3.connect(db)
 
-def table_info(cur,name):
-    ret = cur.execute('pragma table_info(\'%s\')' % name)
-    print('\n'.join(['{:<10s} {:s}'.format(t,n) for (i,n,t,_,_,_) in ret.fetchall()]))
+    def __del__(self):
+        pass
+
+    def tables(self, output=True):
+        ret = self.execa('select name from sqlite_master where type=\'table\'')
+        if output:
+            print('\n'.join([tn for (tn,) in ret]))
+        else:
+            return ret
+
+    def schema(self, name, output=True):
+        ret = self.execa('pragma table_info(\'%s\')' % name)
+        if output:
+            print('\n'.join(['{:<10s} {:s}'.format(t,n) for (i,n,t,_,_,_) in ret]))
+        else:
+            return ret
+
+    def commit(self):
+        self.con.commit()
+
+    def exec(self, cmd, *args, commit=False, fetch=None, fetchall=False):
+        ret = self.con.execute(cmd,*args)
+        if commit:
+            self.commit()
+        if fetchall:
+            ret = ret.fetchall()
+        elif fetch is not None:
+            ret = ret.fetchmany(fetch)
+        return ret
+
+    def execa(self, cmd, *args, **kwargs):
+        kwargs['fetchall'] = True
+        return self.exec(cmd, *args, **kwargs)
+
+    def execn(self, cmd, n, *args, **kwargs):
+        kwargs['fetch'] = n
+        return self.exec(cmd, *args, **kwargs)
+
+def connect(db=None):
+    kwargs = {'db': db} if db is not None else {}
+    return Connection(**kwargs)
 
 def table_op(tname,schema):
     def wrap(f):
@@ -80,3 +119,35 @@ class ChunkInserter:
         self.cur.executemany(self.cmd,self.items)
         self.con.commit()
         self.items = []
+
+class DummyInserter:
+    def __init__(self, *args, chunk_size=1000, output=True, **kwargs):
+        self.chunk_size = chunk_size
+        self.output = output
+        self.last = None
+        self.i = 0
+
+    def insert(self,*args):
+        self.last = args
+        self.i += 1
+        if self.i >= self.chunk_size:
+            self.commit()
+            return True
+        else:
+            return False
+
+    def insertmany(self,args):
+        if len(args) > 0:
+            self.last = args[-1]
+        self.i += len(args)
+        if self.i >= self.chunk_size:
+            self.commit()
+            return True
+        else:
+            return False
+
+    def commit(self):
+        if self.output:
+            print(self.last)
+        self.i = 0
+
