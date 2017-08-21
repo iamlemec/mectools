@@ -477,18 +477,21 @@ def make_table(format,col_fmts,col_names,col_data,caption='',label='',figure=Fal
         tcode += '\n\\end{table}'
     return tcode
 
-def md_table(data, align=None, index=False):
+def md_table(data, align=None, index=False, fmt='%s'):
+    cols = list(data.columns)
+    if index:
+        cols = [data.index.name or ''] + cols
     if align is None:
         align = 'l'
     if len(align) == 1:
-        align = align*len(data.columns)
+        align = align*len(cols)
 
     lalign = [' ' if x == 'r' else ':' for x in align]
     ralign = [' ' if x == 'l' else ':' for x in align]
 
-    header = '| ' + ' | '.join([str(x) for x in data.columns]) + ' |'
-    hsep = '|' + '|'.join([la+('-'*max(1,len(x)))+ra for (x, la, ra) in zip(data.columns, lalign, ralign)]) + '|'
-    rows = ['| '+' | '.join([str(x) for x in row])+' |' for (i, row) in data.iterrows()]
+    header = '| ' + ' | '.join([str(x) for x in cols]) + ' |'
+    hsep = '|' + '|'.join([la+('-'*max(1,len(x)))+ra for (x, la, ra) in zip(cols, lalign, ralign)]) + '|'
+    rows = ['| ' + (str(i)+' | ')*index + ' | '.join([fmt % x for x in row]) + ' |' for (i, row) in data.iterrows()]
 
     return header + '\n' + hsep + '\n' + '\n'.join(rows)
 
