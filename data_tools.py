@@ -1,7 +1,9 @@
 # misc data tools
 
+import os
 import operator as op
 import collections as co
+import itertools as it
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
@@ -475,6 +477,126 @@ def make_table(format,col_fmts,col_names,col_data,caption='',label='',figure=Fal
     tcode += '\\end{center}'
     if figure:
         tcode += '\n\\end{table}'
+    return tcode
+
+def star_map(pv, star='*'):
+    sig = ''
+    if pv < 0.1:
+        sig += star
+    if pv < 0.05:
+        sig += star
+    if pv < 0.01:
+        sig += star
+    return sig
+
+def latex_escape(s):
+    s1 = s.replace('_', '\\_')
+    return s1
+
+# TODO: take extra stats dict, deal with nans
+def reg_table_tex(dres, labels={}, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=latex_escape):
+    if num_func is None: num_func = lambda x: (num_fmt % x) if not np.isnan(x) else ''
+    def par_func_def(x):
+        ret = num_func(x['param'])
+        if not np.isnan(x['pval']):
+            ret = '{%s}^{%s}' % (ret, star_map(x['pval']))
+        if not np.isnan(x['stder']):
+            ret = '$\\begin{array}{c} %s \\\\ (%s) \\end{array}$' % (ret, num_func(x['stder']))
+        return ret
+    if par_func is None: par_func = par_func_def
+
+    nres = len(dres)
+    regs = list(dres)
+
+    info = pd.concat([pd.DataFrame({
+        (col, 'param'): res.params,
+        (col, 'stder'): np.sqrt(res.cov_params().values.diagonal()),
+        (col, 'pval' ): res.pvalues
+    }) for col, res in dres.items()], axis=1)
+    if len(labels) > 0: info = info.loc[labels].rename(labels)
+
+    tcode = ''
+    tcode += '\\begin{tabular}{l%s}\n' % ('c'*nres)
+    tcode += '\\toprule\n'
+    tcode += '& ' + ' & '.join([escape(s) for s in dres]) + ' \\\\\n'
+    tcode += '\\midrule\n'
+    tcode += '\\\\\n'
+    for (i, v) in info.iterrows():
+        vp = v.unstack(level=-1)
+        tcode += i +  '& ' + ' & '.join([par_func(x) for i, x in vp[['param', 'stder', 'pval']].loc[regs].iterrows()]) + ' \\\\\n'
+        tcode += '\\\\\n'
+    tcode += '\\midrule\n'
+    tcode += 'N & ' + ' & '.join(['%d' % res.nobs for res in dres.values()]) + ' \\\\\n'
+    tcode += '$R^2$ & ' + ' & '.join([num_func(res.rsquared) for res in dres.values()]) + ' \\\\\n'
+    tcode += 'Adjusted $R^2$ & ' + ' & '.join([num_func(res.rsquared_adj) for res in dres.values()]) + ' \\\\\n'
+    tcode += 'F Statistic & ' + ' & '.join([num_func(res.fvalue) for res in dres.values()]) + ' \\\\\n'
+    tcode += '\\bottomrule\n'
+    if note is not None: tcode += '\\textit{Note:} & \\multicolumn{%d}{r}{%s}\n' % (nres, escape(note))
+    tcode += '\\end{tabular}\n'
+
+    return tcode
+
+latex_template = """\\documentclass{article}
+\\usepackage{amsmath}
+\\usepackage{booktabs}
+\\usepackage[margin=0in]{geometry}
+\\begin{document}
+\\thispagestyle{empty}
+%s
+\\end{document}"""
+def save_latex(direc, fname, latex, wrap=True, crop=True):
+    ttex = latex_template % latex if wrap else latex
+    hdir = os.getcwd()
+    os.chdir(direc)
+    ftex = open('%s.tex' % fname, 'w+')
+    ftex.write(ttex)
+    ftex.close()
+    os.system('latex %s.tex' % fname)
+    os.system('dvipdf %s.dvi' % fname)
+    if crop: os.system('pdfcrop %s.pdf %s.pdf' % (fname, fname))
+    os.chdir(hdir)
+
+def md_escape(s):
+    s1 = s.replace('*', '\\*')
+    return s1
+
+def reg_table_md(dres, labels={}, order=None, note=None, num_fmt='$%6.4f$', num_func=None, par_func=None, escape=md_escape, fname=None):
+    if num_func is None: num_func = lambda x: (num_fmt % x) if not np.isnan(x) else ''
+    def par_func_def(x):
+        ret = num_func(x['param'])
+        if not np.isnan(x['pval']):
+            ret += star_map(x['pval'], star='\\*')
+        if not np.isnan(x['stder']):
+            ret += '<br/>(%s)' % num_func(x['stder'])
+        return ret
+    if par_func is None: par_func = par_func_def
+
+    nres = len(dres)
+    regs = list(dres)
+
+    info = pd.concat([pd.DataFrame({
+        (col, 'param'): res.params,
+        (col, 'stder'): np.sqrt(res.cov_params().values.diagonal()),
+        (col, 'pval' ): res.pvalues
+    }) for col, res in dres.items()], axis=1)
+    if len(labels) > 0: info = info.loc[labels].rename(labels)
+
+    tcode = ''
+    tcode += '| | ' + ' | '.join([escape(s) for s in dres]) + ' |\n'
+    tcode += '| - |' + ' - | - '*nres + '|\n'
+    for (i, v) in info.iterrows():
+        vp = v.unstack(level=-1)
+        tcode += '| ' + i +  ' | ' + ' | '.join([par_func(x) for i, x in vp[['param', 'stder', 'pval']].loc[regs].iterrows()]) + ' |\n'
+    tcode += '| N | ' + ' | '.join(['$%d$' % res.nobs for res in dres.values()]) + ' |\n'
+    tcode += '| $R^2$ | ' + ' | '.join([num_func(res.rsquared) for res in dres.values()]) + ' |\n'
+    tcode += '| Adjusted $R^2$ | ' + ' | '.join([num_func(res.rsquared_adj) for res in dres.values()]) + ' |\n'
+    tcode += '| F Statistic | ' + ' | '.join([num_func(res.fvalue) for res in dres.values()]) + ' |\n'
+    if note is not None: tcode += '*Note:* ' + escape(note)
+
+    if fname is not None:
+        with open(fname, 'w+') as fid:
+            fid.write(tcode)
+
     return tcode
 
 def md_table(data, align=None, index=False, fmt='%s'):

@@ -20,7 +20,7 @@ class Bundle(object):
         return '<table><tr><td>Name</td><td>Value</td></tr><tr>'+'</tr><tr>'.join(['<td>{}</td><td>{}</td>'.format(k,v) for (k,v) in self.__dict__.items()])+'</tr></table>'
 
     def __iter__(self):
-        return iter(self.__dict__.items())
+        return iter(self.__dict__.keys())
 
     def update(self,d,sub=None):
         if sub is None: sub = d.keys()
@@ -49,8 +49,8 @@ class Bundle(object):
     def dict(self):
         return self.__dict__
 
-    def get(self,key,**kwargs):
-        return self.__dict__.get(key,**kwargs)
+    def get(self,key,de=None):
+        return self.__dict__.get(key,de)
 
     def subset(self,sub):
         return Bundle(self,sub=sub)
@@ -72,7 +72,7 @@ class Bundle(object):
 
     def to_json(self,file_name=None,**kwargs):
         kwargs['indent'] = 4
-        od = collections.OrderedDict(sorted(self))
+        od = collections.OrderedDict(sorted(self.items()))
         if file_name is not None:
             json.dump(od,open(file_name,'w+'),**kwargs)
         else:

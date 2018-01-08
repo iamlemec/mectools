@@ -1,6 +1,7 @@
 # database tools (sqlite3)
 
 import sqlite3
+import pandas as pd
 
 class Connection:
     def __init__(self, db=':memory:'):
@@ -44,6 +45,16 @@ class Connection:
     def execn(self, cmd, n, *args, **kwargs):
         kwargs['fetch'] = n
         return self.exec(cmd, *args, **kwargs)
+
+    def table(self, name, columns=None, cond=None, **kwargs):
+        if columns is None:
+            cols = '*'
+        else:
+            cols = ','.join(columns)
+        cmd = f'select {cols} from {name}'
+        if cond is not None:
+            cmd += f' {cond}'
+        return pd.read_sql(cmd, self.con, **kwargs)
 
 def connect(db=None):
     kwargs = {'db': db} if db is not None else {}
