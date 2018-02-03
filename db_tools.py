@@ -2,6 +2,11 @@
 
 import sqlite3
 import pandas as pd
+import operator as op
+
+def unfurl(ret,idx=[0]):
+    if type(idx) != list: idx = [idx]
+    return op.itemgetter(*idx)(zip(*ret))
 
 class Connection:
     def __init__(self, db=':memory:'):
@@ -161,4 +166,3 @@ class DummyInserter:
         if self.output:
             print(self.last)
         self.i = 0
-

@@ -12,7 +12,6 @@ import matplotlib as mpl
 import matplotlib.pylab as plt
 import matplotlib.cm as cm
 import seaborn as sns
-import patsy
 
 # statistics
 
@@ -126,119 +125,6 @@ def compact_out(df,min_col_width=10,col_spacing=1):
     row_fmt = '{:'+str(row_name_width)+'s}'+col_spacer+'{: '+('f}'+col_spacer+'{: ').join(map(str,col_widths))+'f}'
     print(header_fmt.format('',*df.columns))
     for (i,vs) in df.iterrows(): print(row_fmt.format(str(i),*vs.values))
-
-# fix rolling_cov in pandas
-
-def rolling_cov(arg1, arg2, window, center=False):
-    window = min(window, len(arg1), len(arg2))
-
-    mean = lambda x: pd.rolling_mean(x, window, center=center)
-    count = pd.rolling_count(arg1 + arg2, window, center=center)
-    bias_adj = count / (count - 1)
-    return (mean(arg1 * arg2) - mean(arg1) * mean(arg2)) * bias_adj
-
-def rolling_corr(arg1, arg2, window, center=False):
-    num = rolling_cov(arg1, arg2, window, center=center)
-    den = pd.rolling_std(arg1, window, center=center) * pd.rolling_std(arg2, window, center=center)
-    return num / den
-
-# butterworth filter
-
-import scipy.signal as sig
-
-def butter_bandpass(lowcut, highcut, fs, order=5):
-    nyq = 0.5*fs
-    low = lowcut/nyq
-    high = highcut/nyq
-    (b,a) = sig.butter(order,[low,high],btype='band')
-    return (b,a)
-
-def butter_bandpass_filter(data,lowcut,highcut,fs=1.0,order=5):
-    (b,a) = butter_bandpass(lowcut,highcut,fs,order=order)
-    y = sig.lfilter(b,a,data)
-    return y
-
-# block filters
-
-# this will drop NaNs but doesn't handle non-uniform series
-def lowpass_filter(data,cutoff,fs=1.0):
-    freqs = np.fft.fftfreq(len(data),d=fs)
-    fftv = np.fft.fft(data)
-    fftv[np.abs(freqs)>=cutoff] = 0.0
-    smooth = np.fft.ifft(fftv)
-    return smooth.real
-
-def bandpass_filter(data,lowcut,highcut,fs=1.0):
-    freqs = np.fft.fftfreq(len(data),d=fs)
-    fftv = np.fft.fft(data)
-    cut_sel = (np.abs(freqs)<=lowcut) | (np.abs(freqs)>=highcut)
-    cut_sel[0] = False
-    fftv[cut_sel] = 0.0
-    smooth = np.fft.ifft(fftv)
-    return smooth.real
-
-# plotting panels
-
-def plot_filter(datf,cols=None,ftype='lowpass',show_orig=True,fargs=[],fkwargs={},pargs=[],pkwargs={}):
-    if isinstance(datf,pd.DataFrame):
-        if cols == None: cols = datf.columns
-        datf = datf.filter(cols)
-    else:
-        datf = pd.DataFrame({'value':datf})
-
-    datf = datf.dropna()
-
-    if ftype == 'butter':
-        yfunc = lambda s: butter_bandpass_filter(s,*fargs,**fkwargs)
-    elif ftype == 'lowpass':
-        yfunc = lambda s: lowpass_filter(s,*fargs,**fkwargs)
-    elif ftype == 'bandpass':
-        yfunc = lambda s: bandpass_filter(s,*fargs,**fkwargs)
-    elif ftype == 'smooth':
-        yfunc = lambda s: pd.rolling_mean(s,*fargs,**fkwargs)
-
-    datf_filt = datf.apply(yfunc,axis=0).rename(columns=lambda s: s+'_filt')
-    ax = datf_filt.plot(linewidth=2.0,grid=True,*pargs,**pkwargs)
-    if show_orig:
-        datf.plot(ax=ax,linewidth=0.5,grid=True,*pargs,**pkwargs)
-        step = len(ax.lines)/2
-        for i in range(step): ax.lines[i+step].set_color(ax.lines[i].get_color())
-
-def plot_panel(df,cols=None,detrend=False,norm=False,norm_pos=False,**kwargs):
-    if cols == None: cols = df.columns
-    df_final = df.filter(cols).copy()
-
-    if detrend:
-        df_final = df_final.dropna().apply(sig.detrend)
-
-    if norm:
-        df_final = (df_final-df_final.median())/(df_final.quantile(0.75)-df_final.quantile(0.25))
-    if norm_pos:
-        df_final = df_final/df_final.mean()
-
-    plt.plot(df_final.index,df_final.values,**kwargs)
-    plt.legend(cols,loc='best')
-
-def hist_panel(s,clip=None,**kwargs):
-    s_final = s.dropna().copy()
-
-    if clip != None:
-        s_final = winsorize(s_final,level=clip)
-
-    plt.hist(s_final,**kwargs)
-
-def heatmap(x,y,bins=30,range=None):
-    (heatmap,xedges,yedges) = np.histogram2d(-x,y,bins=bins,range=range)
-    plt.imshow(heatmap,extent=[-xedges[-1],-xedges[0],yedges[0],yedges[-1]],aspect='auto',interpolation='nearest')
-    plt.colorbar()
-
-def heatmap_panel(datf,cols=None,bins=30,range=None):
-    if cols is None: cols = datf.columns
-    (col1,col2) = cols
-    datf = datf.dropna()
-    heatmap(datf[col1],datf[col2],bins=bins,range=range)
-    plt.xlabel(col1)
-    plt.ylabel(col2)
 
 # variable summary
 
@@ -424,42 +310,12 @@ def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=Non
     if not show_graphs:
         plt.close()
 
-def kernel_density_2d(datf,x_var,y_var,x_range=None,y_range=None,graph_squeeze=0.05,log=False,scatter=False,N=64):
-    datf_sel = datf[[x_var,y_var]].dropna()
-    if x_range is None: x_range = v_range(datf_sel[x_var],graph_squeeze)
-    if y_range is None: y_range = v_range(datf_sel[y_var],graph_squeeze)
-
-    gauss_pdf = stats.kde.gaussian_kde(datf_sel.values.T)
-    z_mesh = np.mgrid[x_range[0]:x_range[1]:N*1j,y_range[0]:y_range[1]:N*1j].reshape(2,N*N)
-    z_vals = gauss_pdf(z_mesh).reshape(N,N)
-    if log: z_vals = np.log(z_vals)
-    if scatter: plt.scatter(datf_sel[x_var],datf_sel[y_var],alpha=0.5,color='white')
-    plt.imshow(z_vals,origin='lower',aspect='auto',extent=[z_mesh[0,:].min(),z_mesh[0,:].max(),z_mesh[1,:].min(),z_mesh[1,:].max()])
-    plt.set_cmap(cm.jet)
-
 def datf_eval(datf,formula,use_numpy=True):
     if use_numpy: globs = {'np':np}
     return eval(formula,globs,datf)
 
-def datf_plot(x_vars,y_vars,data,shape=(1,1),figargs={},axargs=None):
-    if type(x_vars) is not list: x_vars = [x_vars]
-    if type(y_vars) is not list: y_vars = [y_vars]
+## basic tables
 
-    (nrows,ncols) = shape
-    n_plots = len(x_vars)
-    if axargs is None: axargs = n_plots*[{}]
-
-    (fig,axs) = plt.subplots(nrows,ncols,**figargs)
-    if type(axs) is not np.ndarray: axs = (axs,)
-    axs = axs[:n_plots]
-
-    for (ax,xv,yv,args) in zip(axs,x_vars,y_vars,axargs):
-        if type(yv) is not list: yv = [yv]
-        x_data = datf_eval(data,xv)
-        y_data = np.vstack([datf_eval(data,yvp) for yvp in yv]).T
-        ax.plot(x_data,y_data,**args)
-
-# LaTeX Tables
 def make_table(format,col_fmts,col_names,col_data,caption='',label='',figure=False):
     col_fmts = ['{:'+cf+'}' for cf in col_fmts]
     col_data = [[cf.format(v) for v in cd] for (cf,cd) in zip(col_fmts,col_data)]
@@ -478,6 +334,26 @@ def make_table(format,col_fmts,col_names,col_data,caption='',label='',figure=Fal
     if figure:
         tcode += '\n\\end{table}'
     return tcode
+
+def md_table(data, align=None, index=False, fmt='%s'):
+    cols = list(data.columns)
+    if index:
+        cols = [data.index.name or ''] + cols
+    if align is None:
+        align = 'l'
+    if len(align) == 1:
+        align = align*len(cols)
+
+    lalign = [' ' if x == 'r' else ':' for x in align]
+    ralign = [' ' if x == 'l' else ':' for x in align]
+
+    header = '| ' + ' | '.join([str(x) for x in cols]) + ' |'
+    hsep = '|' + '|'.join([la+('-'*max(1,len(x)))+ra for (x, la, ra) in zip(cols, lalign, ralign)]) + '|'
+    rows = ['| ' + (str(i)+' | ')*index + ' | '.join([fmt % x for x in row]) + ' |' for (i, row) in data.iterrows()]
+
+    return header + '\n' + hsep + '\n' + '\n'.join(rows)
+
+## star tables
 
 def star_map(pv, star='*'):
     sig = ''
@@ -599,111 +475,58 @@ def reg_table_md(dres, labels={}, order=None, note=None, num_fmt='$%6.4f$', num_
 
     return tcode
 
-def md_table(data, align=None, index=False, fmt='%s'):
-    cols = list(data.columns)
-    if index:
-        cols = [data.index.name or ''] + cols
-    if align is None:
-        align = 'l'
-    if len(align) == 1:
-        align = align*len(cols)
+## regression tools
 
-    lalign = [' ' if x == 'r' else ':' for x in align]
-    ralign = [' ' if x == 'l' else ':' for x in align]
-
-    header = '| ' + ' | '.join([str(x) for x in cols]) + ' |'
-    hsep = '|' + '|'.join([la+('-'*max(1,len(x)))+ra for (x, la, ra) in zip(cols, lalign, ralign)]) + '|'
-    rows = ['| ' + (str(i)+' | ')*index + ' | '.join([fmt % x for x in row]) + ' |' for (i, row) in data.iterrows()]
-
-    return header + '\n' + hsep + '\n' + '\n'.join(rows)
-
-# sqlite tools
-
-def unfurl(ret,idx=[0]):
-    if type(idx) != list: idx = [idx]
-    return op.itemgetter(*idx)(zip(*ret))
-
-# time series histogram
-def ts_hist(s,agg_type='monthly'):
-    plt.style.use('ggplot')
-
-    import calendar
-    from datetime import datetime
-
-    # find date range
-    values = s.apply(lambda t: (t.year,t.month))
-    min_val = min(values)
-    max_val = max(values)
-
-    # make bins
-    def gen_bins():
-        month_incr = lambda y,m: (y,m+1) if m < 12 else (y+1,1)
-        val = min_val
-        while val != max_val:
-            yield val
-            val = month_incr(*val)
-        yield val
-    bins = list(gen_bins())
-    nbins = len(bins)
-
-    # determine tick stride
-    firstof = lambda m0: min([i for (i,(y,m)) in enumerate(bins) if m == m0])
-    if nbins < 12:
-        stride = 1
-        base = 0
-        show_month = True
-    elif nbins < 24:
-        stride = 2
-        base = 0
-        show_month = True
-    elif nbins < 36:
-        stride = 3
-        base = min([firstof(1),firstof(4),firstof(7),firstof(10)])
-        show_month = True
-    elif nbins < 72:
-        stride = 6
-        base = min([firstof(1),firstof(7)])
-        show_month = True
+def clustered_covmat(ret, ids1, ids2=None):
+    uids1 = np.unique(ids1)
+    if ids2 is None:
+        errtype = 'clustered'
     else:
-        stride = 12
-        base = firstof(1)
-        show_month = False
+        errtype = 'dyadic'
+        uids2 = np.unique(ids2)
 
-    # bin it up
-    counts = co.OrderedDict([(b,0) for b in bins])
-    for val in values:
-        counts[val] += 1
+    u = ret.resid
+    X = ret.model.data.exog
+    N, K = X.shape
 
-    # raw plot
-    (fig,ax) = plt.subplots()
-    ax.bar(range(nbins),list(counts.values()))
-    ticks = range(base,nbins,stride)
-    ax.set_xticks(ticks)
+    if errtype == 'clustered':
+        B = np.zeros((K, K))
+        for i1 in uids1:
+            sel = (ids1 == i1)
+            Xui = np.dot(X[sel,:].T, u[sel,None])
+            B += np.dot(Xui, Xui.T)
+        XX1 = np.linalg.inv(np.dot(X.T, X))
+        V = np.dot(np.dot(XX1, B), XX1)
+    elif errtype == 'dyadic':
+        B = np.zeros((K, K))
+        for i1 in uids1:
+            sel = (ids1 == i1)
+            Xui = np.dot(X[sel,:].T, u[sel,None])
+            B += np.dot(Xui, Xui.T)
+        for i2 in uids2:
+            sel = (ids2 == i2)
+            Xui = np.dot(X[sel,:].T, u[sel,None])
+            B += np.dot(Xui, Xui.T)
+        for i1, i2 in zip(uids1, uids2):
+            sel = (ids1 == i1) & (ids2 == i2)
+            Xui = np.dot(X[sel,:].T, u[sel,None])
+            B -= np.dot(Xui, Xui.T)
+        XX1 = np.linalg.inv(np.dot(X.T, X))
+        V = np.dot(np.dot(XX1, B), XX1)
 
-    # proper labels
-    fmt = '%b %Y' if show_month else '%Y'
-    labeler = lambda y,m: datetime(y,m,1).strftime(fmt)
-    labels = [labeler(*bins[i]) for i in ticks]
-    ax.set_xticklabels(labels,rotation=45)
+    # significance stats
+    params = ret.params.values
+    paridx = ret.params.index
+    covmat = pd.DataFrame(V, index=paridx, columns=paridx)
+    bse = np.sqrt(np.diag(V))
+    tvalues = params/bse
+    pvalues = stats.norm.sf(np.abs(tvalues))*2
 
-    # show it
-    fig.subplots_adjust(bottom=0.17)
+    # patch and return
+    ret.cov_params = lambda: covmat
+    ret.pvalues = pvalues
+    return ret
 
-    return (fig,ax)
-
-# time series tools
-
-def shift_column(df, col, per=None, val=None, subset=None, suffix='_p'):
-    df1 = df.copy()
-    colp = col + '_xxx'
-    if val is not None:
-        df1[colp] = df[col] + val
-    else:
-        df1[colp] = df[col].shift(per)
-    if subset is None:
-        subset = list(df.columns)
-    if col not in subset:
-        subset += [col]
-    df1 = df1.merge(df1[subset], how='left', left_on=colp, right_on=col, suffixes=('', suffix))
-    df1 = df1.drop([colp, col+'_p'], axis=1)
-    return df1
+def clustered_regression(datf, reg, cid):
+    ret = smf.ols(reg, data=datf).fit()
+    return clustered_covmat(ret, datf[cid].values)

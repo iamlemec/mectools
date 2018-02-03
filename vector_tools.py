@@ -61,11 +61,11 @@ class Bundle(object):
     def apply(self,f):
         return Bundle({k:f(v) for (k,v) in self.__dict__.items()})
 
-    def to_dataframe(self):
-        return pd.DataFrame(self.__dict__)
+    def to_dataframe(self, index=None):
+        return pd.DataFrame(self.__dict__, index=index)
 
-    def to_series(self):
-        return pd.Series(self.__dict__)
+    def to_series(self, index=None):
+        return pd.Series(self.__dict__, index=index)
 
     def to_array(self):
         return np.array(self.values()).transpose()
