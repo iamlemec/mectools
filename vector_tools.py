@@ -196,6 +196,27 @@ def digitize_mat(x,bins):
         outv[x<bins[i,:]] = i
     return outv
 
+def digitize_nd(x, bins):
+    N = len(bins)
+    d = np.zeros_like(x, dtype=np.int)
+    for i in range(N):
+        d[x>=bins[i]] = i
+    return d
+
+def choose_nd(d, f, axis=0):
+    return np.choose(d.swapaxes(0, axis), f.swapaxes(0, axis)).swapaxes(0, axis)
+
+def interp_nd(x1, x0, f0, axis=0):
+    N = len(x0)
+    d1 = digitize_nd(x1, x0)
+    d2 = np.minimum(N-1, d1+1)
+    d1[d1==d2] -= 1 # only happens on top bin
+    q = (x1-x0[d1])/(x0[d2]-x0[d1])
+    g1 = choose_nd(d1, f0, axis=axis)
+    g2 = choose_nd(d2, f0, axis=axis)
+    f1 = (1-q)*g1 + q*g2
+    return f1
+
 # generate continuous rv by linearly interpolating using cmf approximations (columns of probs)
 # last row should be all ones
 def random_panel(probs,vals,interp=False):

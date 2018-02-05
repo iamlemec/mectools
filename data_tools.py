@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 import statsmodels.api as sm
+import statsmodels.formula.api as smf
 import matplotlib as mpl
 import matplotlib.pylab as plt
 import matplotlib.cm as cm
