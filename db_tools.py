@@ -51,7 +51,7 @@ class Connection:
         kwargs['fetch'] = n
         return self.exec(cmd, *args, **kwargs)
 
-    def table(self, name, columns=None, cond=None, **kwargs):
+    def table(self, name, columns=None, cond=None, frame=False, **kwargs):
         if columns is None:
             cols = '*'
         else:
@@ -59,7 +59,10 @@ class Connection:
         cmd = f'select {cols} from {name}'
         if cond is not None:
             cmd += f' {cond}'
-        return pd.read_sql(cmd, self.con, **kwargs)
+        if frame:
+            return pd.read_sql(cmd, self.con, **kwargs)
+        else:
+            return zip(*self.execa(cmd, **kwargs))
 
 def connect(db=None):
     kwargs = {'db': db} if db is not None else {}

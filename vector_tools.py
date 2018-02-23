@@ -217,6 +217,12 @@ def interp_nd(x1, x0, f0, axis=0):
     f1 = (1-q)*g1 + q*g2
     return f1
 
+def project_nd(xlo, xhi, bins):
+    bhi, blo = bins[1:], bins[:-1]
+    upper = np.maximum(0, bhi - np.maximum(xlo, blo))
+    lower = np.maximum(0, bhi - np.maximum(xhi, blo))
+    return upper - lower
+
 # generate continuous rv by linearly interpolating using cmf approximations (columns of probs)
 # last row should be all ones
 def random_panel(probs,vals,interp=False):
