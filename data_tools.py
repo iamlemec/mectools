@@ -127,6 +127,31 @@ def compact_out(df,min_col_width=10,col_spacing=1):
     print(header_fmt.format('',*df.columns))
     for (i,vs) in df.iterrows(): print(row_fmt.format(str(i),*vs.values))
 
+##
+## indexing
+##
+
+# this will fill interior values of an index that has a canonical ordering
+def gen_range(imin, imax, succ):
+    i = imin
+    while True:
+        if i > imax:
+            return
+        yield i
+        i = succ(i)
+
+def fill_index(sdf, imin=None, imax=None, succ=None, fill_value=np.nan):
+    idx = sdf.index
+    if imin is None:
+        imin = idx.min()
+    if imax is None:
+        imax = idx.max()
+    if succ is None:
+        rng = np.arange(imin, imax + 1)
+    else:
+        rng = gen_range(imin, imax, succ)
+    return sdf.reindex(rng, fill_value=fill_value)
+
 # variable summary
 
 def var_info(datf,var=''):
