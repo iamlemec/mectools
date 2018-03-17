@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+
+import os
+import json
+import click
+
+# screen commands
+cmd_stat = 'screen -S {unit} -Q select . &> /dev/null'
+cmd_start = 'screen -L -S {unit} -d -m {cmd}'
+cmd_kill = 'screen -S {unit} -X quit'
+cmd_log = 'less screenlog.0'
+cmd_tail = 'tail screenlog.0 {follow}'
+
+# directories
+script_dir = os.path.dirname(os.path.realpath(__file__))
+data_path = os.path.join(script_dir, 'mec.json')
+base_dir = os.getcwd()
+
+# get specification
+with open(data_path) as fid:
+    specs = json.load(fid)
+
+# operations
+def is_running(unit):
+    return os.system(cmd_stat.format(unit=unit)) == 0
+
+def dispatch(func, unit):
+    if unit is None:
+        for u in specs:
+            func(u)
+    else:
+        if unit in specs:
+            func(unit)
+        else:
+            print(f'{unit}: not found')
+
+def do_info(unit):
+    info = specs[unit]
+    print(unit)
+    if 'cmd' in info:
+        ucmd = info['cmd']
+        print(f'cmd: {ucmd}')
+    if 'dir' in info:
+        udir = info['dir']
+        print(f'dir: {udir}')
+    if is_running(unit):
+        print(f'status: running')
+    else:
+        print(f'status: not running')
+    print()
+
+def do_stat(unit):
+    if is_running(unit):
+        print(f'{unit}: running')
+    else:
+        print(f'{unit}: not running')
+
+def do_start(unit):
+    info = specs[unit]
+    if is_running(unit):
+        print(f'{unit}: already running')
+    else:
+        print(f'{unit}: starting')
+        os.chdir(info['dir'])
+        os.system(cmd_start.format(unit=unit, cmd=info['cmd']))
+        os.chdir(base_dir)
+
+def do_kill(unit):
+    if not is_running(unit):
+        print(f'{unit}: not running')
+    else:
+        print(f'{unit}: killing')
+        os.system(cmd_kill.format(unit=unit))
+
+def do_restart(unit):
+    if is_running(unit):
+        do_kill(unit)
+    do_start(unit)
+
+# interface
+@click.group()
+def cli():
+    pass
+
+@cli.command()
+def list():
+    print(', '.join(specs.keys()))
+
+@cli.command()
+@click.argument('unit', required=False)
+def info(unit):
+    dispatch(do_info, unit)
+
+@cli.command()
+@click.argument('unit', required=False)
+def stat(unit):
+    dispatch(do_stat, unit)
+
+@cli.command()
+@click.argument('unit', required=False)
+def start(unit):
+    dispatch(do_start, unit)
+
+@cli.command()
+@click.argument('unit', required=False)
+def kill(unit):
+    dispatch(do_kill, unit)
+
+@cli.command()
+@click.argument('unit', required=False)
+def stop(unit):
+    dispatch(do_kill, unit)
+
+@cli.command()
+@click.argument('unit', required=False)
+def restart(unit):
+    dispatch(do_restart, unit)
+
+@cli.command()
+@click.argument('unit')
+def log(unit):
+    info = specs[unit]
+    os.chdir(info['dir'])
+    os.system(cmd_log)
+    os.chdir(base_dir)
+
+@cli.command()
+@click.argument('unit')
+@click.option('-f', is_flag=True)
+def tail(unit, f):
+    info = specs[unit]
+    flag = '-f' if f else ''
+    os.chdir(info['dir'])
+    os.system(cmd_tail.format(follow=flag))
+    os.chdir(base_dir)
+
+if __name__ == '__main__':
+    cli()
