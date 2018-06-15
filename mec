@@ -5,7 +5,7 @@ import json
 import click
 
 # screen commands
-cmd_stat = 'screen -S {unit} -Q select . &> /dev/null'
+cmd_stat = 'screen -S {unit} -Q select . > /dev/null 2>&1'
 cmd_start = 'screen -L -S {unit} -d -m {cmd}'
 cmd_kill = 'screen -S {unit} -X quit'
 cmd_log = 'less screenlog.0'
