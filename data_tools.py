@@ -395,9 +395,26 @@ def latex_escape(s):
     s1 = s.replace('_', '\\_')
     return s1
 
+stats0 = {
+    'N': 'nobs',
+    '$R^2$': 'rsquared',
+    'Adjusted $R^2$': 'rsquared_adj',
+    'F Statistic': 'fvalue'
+}
+
 # TODO: take extra stats dict, deal with nans
-def reg_table_tex(dres, labels={}, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=latex_escape):
-    if num_func is None: num_func = lambda x: (num_fmt % x) if not np.isnan(x) else ''
+def reg_table_tex(dres, labels={}, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=latex_escape, stats=stats0):
+    def num_func_def(x):
+        if np.isnan(x):
+            return ''
+        elif type(x) in (np.int, np.int64):
+            return '%d' % x
+        elif type(x) in (np.float, np.float64):
+            return num_fmt % x
+        else:
+            return str(x)
+    if num_func is None: num_func = num_func_def
+
     def par_func_def(x):
         ret = num_func(x['param'])
         if not np.isnan(x['pval']):
@@ -423,15 +440,13 @@ def reg_table_tex(dres, labels={}, note=None, num_fmt='%6.4f', num_func=None, pa
     tcode += '& ' + ' & '.join([escape(s) for s in dres]) + ' \\\\\n'
     tcode += '\\midrule\n'
     tcode += '\\\\\n'
-    for (i, v) in info.iterrows():
+    for i, v in info.iterrows():
         vp = v.unstack(level=-1)
         tcode += i +  '& ' + ' & '.join([par_func(x) for i, x in vp[['param', 'stder', 'pval']].loc[regs].iterrows()]) + ' \\\\\n'
         tcode += '\\\\\n'
     tcode += '\\midrule\n'
-    tcode += 'N & ' + ' & '.join(['%d' % res.nobs for res in dres.values()]) + ' \\\\\n'
-    tcode += '$R^2$ & ' + ' & '.join([num_func(res.rsquared) for res in dres.values()]) + ' \\\\\n'
-    tcode += 'Adjusted $R^2$ & ' + ' & '.join([num_func(res.rsquared_adj) for res in dres.values()]) + ' \\\\\n'
-    tcode += 'F Statistic & ' + ' & '.join([num_func(res.fvalue) for res in dres.values()]) + ' \\\\\n'
+    for lab, att in stats.items():
+        tcode += lab + ' & ' + ' & '.join([num_func(getattr(res, att, np.nan)) for res in dres.values()]) + ' \\\\\n'
     tcode += '\\bottomrule\n'
     if note is not None: tcode += '\\textit{Note:} & \\multicolumn{%d}{r}{%s}\n' % (nres, escape(note))
     tcode += '\\end{tabular}\n'
@@ -462,8 +477,18 @@ def md_escape(s):
     s1 = s.replace('*', '\\*')
     return s1
 
-def reg_table_md(dres, labels={}, order=None, note=None, num_fmt='$%6.4f$', num_func=None, par_func=None, escape=md_escape, fname=None):
-    if num_func is None: num_func = lambda x: (num_fmt % x) if not np.isnan(x) else ''
+def reg_table_md(dres, labels={}, order=None, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=md_escape, stats=stats0, fname=None):
+    def num_func_def(x):
+        if np.isnan(x):
+            return ''
+        elif type(x) in (np.int, np.int64):
+            return '$%d$' % x
+        elif type(x) in (np.float, np.float64):
+            return '$' + (num_fmt % x) + '$'
+        else:
+            return str(x)
+    if num_func is None: num_func = num_func_def
+
     def par_func_def(x):
         ret = num_func(x['param'])
         if not np.isnan(x['pval']):
@@ -486,13 +511,11 @@ def reg_table_md(dres, labels={}, order=None, note=None, num_fmt='$%6.4f$', num_
     tcode = ''
     tcode += '| | ' + ' | '.join([escape(s) for s in dres]) + ' |\n'
     tcode += '| - |' + ' - | - '*nres + '|\n'
-    for (i, v) in info.iterrows():
+    for i, v in info.iterrows():
         vp = v.unstack(level=-1)
         tcode += '| ' + i +  ' | ' + ' | '.join([par_func(x) for i, x in vp[['param', 'stder', 'pval']].loc[regs].iterrows()]) + ' |\n'
-    tcode += '| N | ' + ' | '.join(['$%d$' % res.nobs for res in dres.values()]) + ' |\n'
-    tcode += '| $R^2$ | ' + ' | '.join([num_func(res.rsquared) for res in dres.values()]) + ' |\n'
-    tcode += '| Adjusted $R^2$ | ' + ' | '.join([num_func(res.rsquared_adj) for res in dres.values()]) + ' |\n'
-    tcode += '| F Statistic | ' + ' | '.join([num_func(res.fvalue) for res in dres.values()]) + ' |\n'
+    for lab, att in stats.items():
+        tcode += '| ' + lab + ' | ' + ' | '.join([num_func(getattr(res, att, np.nan)) for res in dres.values()]) + ' |\n'
     if note is not None: tcode += '*Note:* ' + escape(note)
 
     if fname is not None:
