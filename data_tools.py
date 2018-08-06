@@ -14,7 +14,9 @@ import matplotlib.pylab as plt
 import matplotlib.cm as cm
 import seaborn as sns
 
-# statistics
+##
+## statistics
+##
 
 def noinf(s):
     s[np.isinf(s)] = np.nan
@@ -26,55 +28,57 @@ def nonan(s):
 def log(s):
     return noinf(np.log(s))
 
-def winsorize(s,level=0.05):
-    if type(level) not in (list,tuple):
-        level = (level,1.0-level)
+def winsorize(s, level=0.05):
+    if type(level) not in (list, tuple):
+        level = level, 1.0-level
 
-    clipper = lambda s1: s1.clip(lower=s1.quantile(level[0]),upper=s1.quantile(level[1]))
+    clipper = lambda s1: s1.clip(lower=s1.quantile(level[0]), upper=s1.quantile(level[1]))
     if type(s) is pd.Series:
         return clipper(s)
     else:
         return s.apply(clipper)
 
-def mean(s,winsor=False):
+def mean(s, winsor=False):
     if winsor: s = winsorize(s)
     return s.mean()
 
-def std(s,winsor=False):
+def std(s, winsor=False):
     if winsor: s = winsorize(s)
     return s.std()
 
-def iqr(s,level=0.25):
-    return s.quantile(0.5+level)-s.quantile(0.5-level)
+def iqr(s, level=0.25):
+    return s.quantile(0.5+level) - s.quantile(0.5-level)
 
-def quantile(s,p):
+def quantile(s, p):
     if type(s) is pd.Series:
         return s.quantile(p)
     else:
-        return stats.scoreatpercentile(s,100.0*p)
+        return stats.scoreatpercentile(s, 100*p)
 
-def digitize(x,bins):
-    if len(x) == 0: return np.array([],dtype=np.int)
-    return np.digitize(x,bins)
+def digitize(x, bins):
+    if len(x) == 0: return np.array([], dtype=np.int)
+    return np.digitize(x, bins)
 
-def v_range(vec,squeeze=0.0):
-    if type(squeeze) in (list,tuple):
-        return (quantile(vec,squeeze[0]),quantile(vec,squeeze[1]))
+def vrange(vec, squeeze=0.0):
+    if type(squeeze) in (list, tuple):
+        return quantile(vec, squeeze[0]), quantile(vec, squeeze[1])
     else:
-        return (quantile(vec,squeeze),quantile(vec,1.0-squeeze))
+        return quantile(vec, squeeze), quantile(vec, 1.0-squeeze)
 
-def corr_robust(df,xcol,ycol,wcol=None,winsor=None):
-    if xcol == ycol: return (1.0,0.0)
+def corr_robust(df, xcol, ycol, wcol=None, winsor=None):
+    if xcol == ycol:
+        return 1.0, 0.0
 
     all_vars = [xcol,ycol]
-    if wcol is not None: all_vars += [wcol]
+    if wcol is not None:
+        all_vars += [wcol]
     df1 = df[all_vars].dropna()
 
     if winsor is not None:
-        df1[[xcol,ycol]] = winsorize(df1[[xcol,ycol]],level=winsor)
+        df1[[xcol, ycol]] = winsorize(df1[[xcol, ycol]], level=winsor)
 
     if wcol is None:
-        return stats.pearsonr(df1[xcol],df1[ycol])
+        return stats.pearsonr(df1[xcol], df1[ycol])
     else:
         wgt = df1[wcol].astype(np.float)/np.sum(df1[wcol])
         xmean = np.sum(wgt*df1[xcol])
@@ -85,29 +89,19 @@ def corr_robust(df,xcol,ycol,wcol=None,winsor=None):
         cval = vcov/np.sqrt(xvar*yvar)
         nval = len(df1)
         tval = cval*np.sqrt((nval-2)/(1.0-cval*cval))
-        pval = 2.0*stats.t.sf(np.abs(tval),nval)
-        return (cval,pval)
+        pval = 2.0*stats.t.sf(np.abs(tval), nval)
+        return cval, pval
 
 def gini(x):
     N = len(x)
-    B = np.sum(np.arange(N,0,-1)*np.sort(x))/(N*np.sum(x))
-    return 1.0+(1.0/N)-2.0*B
+    B = np.sum(np.arange(N, 0, -1)*np.sort(x))/(N*np.sum(x))
+    return 1 + 1/N - 2*B
 
-# data frame tools
+##
+## data frame tools
+##
 
-def prefixer(sp):
-    return lambda s: sp+s
-
-def postfixer(sp):
-    return lambda s: s+sp
-
-def prefix(sv,sp):
-    return map(prefixer(sp),sv)
-
-def postfix(sv,sp):
-    return map(postfixer(sp),sv)
-
-def stack_frames(dfs,prefixes=None,postfixes=None):
+def stack_frames(dfs, prefixes=None, suffixes=None):
     if prefixes is None:
         prefixes = len(dfs)*['']
     elif type(prefixes) not in (tuple,list):
@@ -116,16 +110,17 @@ def stack_frames(dfs,prefixes=None,postfixes=None):
         postfixes = len(dfs)*['']
     elif type(postfixes) not in (tuple,list):
         postfixes = len(dfs)*[postfixes]
-    return pd.concat([df.rename(columns=prefixer(pre)).rename(columns=postfixer(post)) for (df,pre,post) in zip(dfs,prefixes,postfixes)],axis=1)
+    return pd.concat([df.add_prefix(pre).add_suffix(post) for df, pre, post in zip(dfs, prefixes, postfixes)], axis=1)
 
-def compact_out(df,min_col_width=10,col_spacing=1):
+def compact_out(df, min_col_width=10, col_spacing=1):
     col_spacer = ' '*col_spacing
-    row_name_width = max(min_col_width,max(map(lambda x: len(str(x)),df.index)))
-    col_widths = map(lambda x: max(min_col_width,len(str(x))),df.columns)
-    header_fmt = '{:'+str(row_name_width)+'s}'+col_spacer+'{:>'+('s}'+col_spacer+'{:>').join(map(str,col_widths))+'}'
-    row_fmt = '{:'+str(row_name_width)+'s}'+col_spacer+'{: '+('f}'+col_spacer+'{: ').join(map(str,col_widths))+'f}'
-    print(header_fmt.format('',*df.columns))
-    for (i,vs) in df.iterrows(): print(row_fmt.format(str(i),*vs.values))
+    row_name_width = max(min_col_width, max(map(lambda x: len(str(x)), df.index)))
+    col_widths = map(lambda x: max(min_col_width, len(str(x))), df.columns)
+    header_fmt = '{:' + str(row_name_width) + 's}' + col_spacer + '{:>' + ('s}'+col_spacer+'{:>').join(map(str,col_widths)) + '}'
+    row_fmt = '{:' + str(row_name_width) + 's}' + col_spacer + '{: ' + ('f}'+col_spacer+'{: ').join(map(str, col_widths)) + 'f}'
+    print(header_fmt.format('', *df.columns))
+    for i, vs in df.iterrows():
+        print(row_fmt.format(str(i), *vs.values))
 
 ##
 ## indexing
@@ -152,7 +147,9 @@ def fill_index(sdf, imin=None, imax=None, succ=None, fill_value=np.nan):
         rng = gen_range(imin, imax, succ)
     return sdf.reindex(rng, fill_value=fill_value)
 
-# variable summary
+##
+## variable summary
+##
 
 def var_info(datf,var=''):
     if type(datf) is pd.Series:
@@ -163,14 +160,20 @@ def var_info(datf,var=''):
     svar.hist()
 
 # pretty flexible dataframe correlation plotter
-def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None, x_range=None, y_range=None, x_name=None, y_name=None, title='', reg_type=None, size_scale=1.0, winsor=None, graph_squeeze=0.05, alpha=0.8, color_skew=0.5, style=None, palette=None, despine=None, grid=None, logx=False, logy=False, loglog=False):
+def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None,
+              x_range=None, y_range=None, x_name=None, y_name=None, title='',
+              reg_type=None, size_scale=1.0, winsor=None, graph_squeeze=0.05,
+              alpha=0.8, color_skew=0.5, style=None, palette=None,
+              despine=None, grid=None, logx=False, logy=False, loglog=False):
     # shallow copy
     datf = datf.copy()
 
     # sort out needed columns
     all_vars = [x_var, y_var]
-    if w_var: all_vars += [w_var]
-    if c_var and not c_var == 'index': all_vars += [c_var]
+    if w_var:
+        all_vars += [w_var]
+    if c_var and not c_var == 'index':
+        all_vars += [c_var]
 
     # transformations
     if logx or loglog:
@@ -280,52 +283,62 @@ def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None, x_range=No
 
     # return
     if reg_type != 'kernel':
-        return (fig, ax, res)
+        return fig, ax, res
     else:
-        return (fig, ax)
+        return fig, ax
 
-def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=None,y_ranges=None,legends=None,legend_locs=None,figsize=(5,4.5),fontsize=None,file_name=None,show_graphs=True,pcmd='plot',extra_args={}):
-    plt.interactive(show_graphs)
-
+def grid_plots(eqvars, x_vars, y_vars, shape, x_names=None, y_names=None,
+               x_ranges=None, y_ranges=None, legends=None, legend_locs=None,
+               figsize=(5, 4.5), fontsize=None, file_name=None,
+               show_graphs=True, pcmd='plot', extra_args={}):
     if pcmd == 'bar':
         color_cycle = mpl.rcParams['axes.prop_cycle']
-        def pfun(ax,x_data,y_data,**kwargs):
+        def pfun(ax, x_data, y_data, **kwargs):
             n_series = len(y_data.T)
             tot_width = np.ptp(x_data)
             width = float(tot_width)/len(x_data)/n_series
-            for (i,(cc,y_series)) in enumerate(zip(color_cycle,y_data.T)):
-                ax.bar(x_data+(i-float(n_series)/2)*width,y_series,width,**dict(cc,**kwargs))
+            for i, (cc, y_series) in enumerate(zip(color_cycle, y_data.T)):
+                ax.bar(x_data+(i-float(n_series)/2)*width, y_series, width, **dict(cc, **kwargs))
     else:
-        def pfun(ax,x_data,y_data,**kwargs):
-            getattr(ax,pcmd)(x_data,y_data,**kwargs)
+        def pfun(ax, x_data, y_data, **kwargs):
+            getattr(ax, pcmd)(x_data, y_data, **kwargs)
 
     n_plots = len(y_vars)
-    if y_names is None: y_names = n_plots*[None]
-    if y_ranges is None: y_ranges = n_plots*[None]
-    if legends is None: legends = n_plots*[None]
-    if legend_locs is None: legend_locs = n_plots*[None]
+    if y_names is None:
+        y_names = n_plots*[None]
+    if y_ranges is None:
+        y_ranges = n_plots*[None]
+    if legends is None:
+        legends = n_plots*[None]
+    if legend_locs is None:
+        legend_locs = n_plots*[None]
 
-    if type(x_vars) is not list: x_vars = n_plots*[x_vars]
-    if type(x_names) is not list: x_names = n_plots*[x_names]
-    if type(x_ranges) is not list: x_ranges = n_plots*[x_ranges]
-    if type(extra_args) is not list: extra_args = n_plots*[extra_args]
+    if type(x_vars) is not list:
+        x_vars = n_plots*[x_vars]
+    if type(x_names) is not list:
+        x_names = n_plots*[x_names]
+    if type(x_ranges) is not list:
+        x_ranges = n_plots*[x_ranges]
+    if type(extra_args) is not list:
+        extra_args = n_plots*[extra_args]
 
-    (rows,cols) = shape
-    figx0,figy0 = figsize
-    (figx,figy) = (figx0*cols,figy0*rows)
-    (fig,axlist) = plt.subplots(rows,cols,figsize=(figx,figy))
+    rows, cols = shape
+    figx0, figy0 = figsize
+    figx, figy = figx0*cols, figy0*rows
+    fig, axlist = plt.subplots(rows, cols, figsize=(figx, figy))
     axlist = axlist.flatten()[:n_plots]
-    for (xv,yv,xn,yn,xr,yr,lg,ll,ax,ea) in zip(x_vars,y_vars,x_names,y_names,x_ranges,y_ranges,legends,legend_locs,axlist,extra_args):
+    for xv, yv, xn, yn, xr, yr, lg, ll, ax, ea in zip(x_vars, y_vars, x_names, y_names, x_ranges, y_ranges, legends, legend_locs, axlist, extra_args):
         x_data = eqvars[xv]
-        if type(yv) is not list: yv = [yv]
+        if type(yv) is not list:
+            yv = [yv]
         y_data = np.array([eqvars[yv1] for yv1 in yv]).T
-        pfun(ax,x_data,y_data,**ea)
+        pfun(ax, x_data, y_data, **ea)
         ax.locator_params(nbins=7)
         if xn is not None: ax.set_xlabel(xn)
         if xr is not None: ax.set_xlim(xr)
         if yn is not None: ax.set_title(yn)
         if yr is not None: ax.set_ylim(yr)
-        if lg is not None: ax.legend(lg,loc=ll if ll is not None else 'best')
+        if lg is not None: ax.legend(lg, loc=[ll if ll is not None else 'best'])
 
     fig.subplots_adjust(bottom=0.15)
     fig.tight_layout()
@@ -333,28 +346,34 @@ def grid_plots(eqvars,x_vars,y_vars,shape,x_names=None,y_names=None,x_ranges=Non
     if file_name is not None:
         plt.savefig(file_name)
 
-    if not show_graphs:
+    if show_graphs:
+        plt.show()
+    else:
         plt.close()
 
-def datf_eval(datf,formula,use_numpy=True):
-    if use_numpy: globs = {'np':np}
-    return eval(formula,globs,datf)
+def datf_eval(datf, formula, use_numpy=True):
+    if use_numpy:
+        globs = {'np':np}
+    return eval(formula, globs, datf)
 
+##
 ## basic tables
+##
 
-def make_table(format,col_fmts,col_names,col_data,caption='',label='',figure=False):
+def latex_table(format, col_fmts, col_names, col_data, caption='', label='', figure=False):
     col_fmts = ['{:'+cf+'}' for cf in col_fmts]
-    col_data = [[cf.format(v) for v in cd] for (cf,cd) in zip(col_fmts,col_data)]
+    col_data = [[cf.format(v) for v in cd] for cf, cd in zip(col_fmts,col_data)]
     tcode = ''
     if figure:
         tcode += '\\begin{table}[ht]\n'
-        tcode += '\\caption{'+caption+'}\n'
-        tcode += '\\label{'+label+'}\n'
+        tcode += '\\caption{' + caption + '}\n'
+        tcode += '\\label{' + label + '}\n'
     tcode += '\\begin{center}\n'
-    tcode += '\\begin{tabular}{'+format+'} \\hline\n'
-    tcode += ' & '.join(['\\textbf{'+cn+'}' for cn in col_names])+' \\\\ \\hline\n'
-    for row in zip(*col_data): tcode += ' & '.join(row)+' \\\\'+'\n'
-    tcode = tcode[:-3]+'\n'
+    tcode += '\\begin{tabular}{' + format + '} \\hline\n'
+    tcode += ' & '.join(['\\textbf{' + cn + '}' for cn in col_names])+' \\\\ \\hline\n'
+    for row in zip(*col_data):
+        tcode += ' & '.join(row) + ' \\\\' + '\n'
+    tcode = tcode[:-3] + '\n'
     tcode += '\\end{tabular}\n'
     tcode += '\\end{center}'
     if figure:
@@ -362,7 +381,16 @@ def make_table(format,col_fmts,col_names,col_data,caption='',label='',figure=Fal
     return tcode
 
 def md_table(data, align=None, index=False, fmt='%s'):
+    data = data.copy()
     cols = list(data.columns)
+
+    for c in cols:
+        dt = data.dtypes[c]
+        if dt == np.float64:
+            data[c] = data[c].apply(lambda x: fmt % x)
+        else:
+            data[c] = data[c].apply(str)
+
     if index:
         cols = [data.index.name or ''] + cols
     if align is None:
@@ -375,11 +403,13 @@ def md_table(data, align=None, index=False, fmt='%s'):
 
     header = '| ' + ' | '.join([str(x) for x in cols]) + ' |'
     hsep = '|' + '|'.join([la+('-'*max(1,len(x)))+ra for (x, la, ra) in zip(cols, lalign, ralign)]) + '|'
-    rows = ['| ' + (str(i)+' | ')*index + ' | '.join([fmt % x for x in row]) + ' |' for (i, row) in data.iterrows()]
+    rows = ['| ' + (str(i)+' | ')*index + ' | '.join(row) + ' |' for (i, row) in data.iterrows()]
 
     return header + '\n' + hsep + '\n' + '\n'.join(rows)
 
+##
 ## star tables
+##
 
 def star_map(pv, star='*'):
     sig = ''
@@ -413,7 +443,8 @@ def reg_table_tex(dres, labels={}, note=None, num_fmt='%6.4f', num_func=None, pa
             return num_fmt % x
         else:
             return str(x)
-    if num_func is None: num_func = num_func_def
+    if num_func is None:
+        num_func = num_func_def
 
     def par_func_def(x):
         ret = num_func(x['param'])
@@ -422,7 +453,8 @@ def reg_table_tex(dres, labels={}, note=None, num_fmt='%6.4f', num_func=None, pa
         if not np.isnan(x['stder']):
             ret = '$\\begin{array}{c} %s \\\\ (%s) \\end{array}$' % (ret, num_func(x['stder']))
         return ret
-    if par_func is None: par_func = par_func_def
+    if par_func is None:
+        par_func = par_func_def
 
     nres = len(dres)
     regs = list(dres)
@@ -432,7 +464,8 @@ def reg_table_tex(dres, labels={}, note=None, num_fmt='%6.4f', num_func=None, pa
         (col, 'stder'): np.sqrt(res.cov_params().values.diagonal()),
         (col, 'pval' ): res.pvalues
     }) for col, res in dres.items()], axis=1)
-    if len(labels) > 0: info = info.loc[labels].rename(labels)
+    if len(labels) > 0:
+        info = info.loc[labels].rename(labels)
 
     tcode = ''
     tcode += '\\begin{tabular}{l%s}\n' % ('c'*nres)
@@ -448,7 +481,8 @@ def reg_table_tex(dres, labels={}, note=None, num_fmt='%6.4f', num_func=None, pa
     for lab, att in stats.items():
         tcode += lab + ' & ' + ' & '.join([num_func(getattr(res, att, np.nan)) for res in dres.values()]) + ' \\\\\n'
     tcode += '\\bottomrule\n'
-    if note is not None: tcode += '\\textit{Note:} & \\multicolumn{%d}{r}{%s}\n' % (nres, escape(note))
+    if note is not None:
+        tcode += '\\textit{Note:} & \\multicolumn{%d}{r}{%s}\n' % (nres, escape(note))
     tcode += '\\end{tabular}\n'
 
     return tcode
@@ -487,7 +521,8 @@ def reg_table_md(dres, labels={}, order=None, note=None, num_fmt='%6.4f', num_fu
             return '$' + (num_fmt % x) + '$'
         else:
             return str(x)
-    if num_func is None: num_func = num_func_def
+    if num_func is None:
+        num_func = num_func_def
 
     def par_func_def(x):
         ret = num_func(x['param'])
@@ -496,7 +531,8 @@ def reg_table_md(dres, labels={}, order=None, note=None, num_fmt='%6.4f', num_fu
         if not np.isnan(x['stder']):
             ret += '<br/>(%s)' % num_func(x['stder'])
         return ret
-    if par_func is None: par_func = par_func_def
+    if par_func is None:
+        par_func = par_func_def
 
     nres = len(dres)
     regs = list(dres)
@@ -516,7 +552,8 @@ def reg_table_md(dres, labels={}, order=None, note=None, num_fmt='%6.4f', num_fu
         tcode += '| ' + i +  ' | ' + ' | '.join([par_func(x) for i, x in vp[['param', 'stder', 'pval']].loc[regs].iterrows()]) + ' |\n'
     for lab, att in stats.items():
         tcode += '| ' + lab + ' | ' + ' | '.join([num_func(getattr(res, att, np.nan)) for res in dres.values()]) + ' |\n'
-    if note is not None: tcode += '*Note:* ' + escape(note)
+    if note is not None:
+        tcode += '*Note:* ' + escape(note)
 
     if fname is not None:
         with open(fname, 'w+') as fid:
@@ -524,7 +561,9 @@ def reg_table_md(dres, labels={}, order=None, note=None, num_fmt='%6.4f', num_fu
 
     return tcode
 
+##
 ## regression tools
+##
 
 def clustered_covmat(ret, ids1, ids2=None):
     uids1 = np.unique(ids1)

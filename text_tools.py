@@ -11,6 +11,23 @@ from sumy.summarizers.lex_rank import LexRankSummarizer
 from sumy.nlp.stemmers import Stemmer
 from sumy.utils import get_stop_words, fetch_url
 
+##
+## parsing text formats
+##
+
+def print_xml(src, indent='    '):
+    return parseString(src).toprettyxml(indent=indent)
+
+def parse_wiki(src, strip=False):
+    df = pd.read_html(src)[0]
+    if strip:
+        df = df.applymap(lambda s: s.split('♠')[-1]) # for sortkey spans in wikitables
+    return df
+
+##
+## summarizing text
+##
+
 def summarize_url(url, **kwargs):
     html = fetch_url(url)
     return summarize_html(html, **kwargs)
@@ -34,12 +51,3 @@ def summarize(text, n=10, lang="english", Parser=PlaintextParser, Summarizer=Lex
         return fill.join(sentences)
     else:
         return sentences
-
-def print_xml(src, indent='    '):
-    return parseString(src).toprettyxml(indent=indent)
-
-def parse_wiki(src, strip=False):
-    df = pd.read_html(src)[0]
-    if strip:
-        df = df.applymap(lambda s: s.split('♠')[-1]) # for sortkey spans in wikitables
-    return df
