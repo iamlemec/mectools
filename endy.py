@@ -10,9 +10,32 @@ def digitize(x, bins):
         d[x>=bins[i]] = i
     return d
 
+# choose with flat indexing logic (1 copy?)
+def choose0(d, f):
+    sd0 = d.shape[0]
+    sd1 = np.prod(f.shape[1:])
+    ic = sd1*d.reshape((sd0, -1)) + np.arange(sd1)[None, :]
+    return f.flat[ic].reshape(d.shape)
+
 # choose along a given axis
 def choose(d, f, axis=0):
-    return np.choose(d.swapaxes(0, axis), f.swapaxes(0, axis)).swapaxes(0, axis)
+    # swap to 0th axis
+    if axis != 0:
+        d = d.swapaxes(0, axis)
+        f = f.swapaxes(0, axis)
+
+    # broadcast trailing axes
+    if f.shape[1:] != d.shape[1:]:
+        f = np.broadcast_to(f, (f.shape[0],)+d.shape[1:])
+
+    # apply with 0th version
+    g = choose0(d, f)
+
+    # unswap 0th axis
+    if axis != 0:
+        g = g.swapaxes(0, axis)
+
+    return g
 
 # interpolate non-flat domains on a given axis
 def interp(x1, x0, f0, axis=0):
@@ -36,6 +59,9 @@ def expand(x, dims=1, axis=-1):
     return x.reshape(shape)
 
 # project non-flat ranges on bins
+# bins: grid spec (N+1)
+# xlo, xhi: bin lows and his (M)
+# returns: (NxM)
 def project(bins, xp=None, xlo=None, xhi=None, axis=-1):
     # if point given, assume additively scaled ranges around each bin
     if xp is not None:
@@ -52,4 +78,43 @@ def project(bins, xp=None, xlo=None, xhi=None, axis=-1):
     total = upper - lower
     total[...,[ 0]] += np.maximum(0, blo[..., 0] - xlo) - np.maximum(0, blo[..., 0] - xhi)
     total[...,[-1]] += np.maximum(0, xhi - bhi[...,-1]) - np.maximum(0, xlo - bhi[...,-1])
-    return total/(bhi-blo)
+    return total/(xhi-xlo)
+
+
+# binsearch over a vectorizable function
+# only flat for now - could accept axis in the future
+def binsearch_vec(fun, xmin, xmax, max_iter=64, bs_tol=1e-12):
+    f0, f1 = fun(xmin), fun(xmax) # testing sizes
+    N = len(f0)
+    assert(len(f1) == N)
+
+    # expand bounds if necessary
+    if np.isscalar(xmin):
+        x0 = xmin*np.ones(N)
+    else:
+        x0 = xmin.copy()
+    if np.isscalar(xmax):
+        x1 = xmax*np.ones(N)
+    else:
+        x1 = xmax.copy()
+
+    # flip if needed
+    swap = (f0 > f1)
+    x0[swap], x1[swap] = x1[swap], x0[swap]
+
+    # these are invariant to swapping
+    xp = 0.5*(x0+x1)
+    fp = 0.5*(f0+f1)
+
+    # loop until convergence or max_iter
+    for i in range(max_iter):
+        sel0 = (fp <= 0.0)
+        sel1 = ~sel0
+        x0[sel0] = xp[sel0]
+        x1[sel1] = xp[sel1]
+        xp = 0.5*(x0+x1)
+        fp = fun(xp)
+        if np.max(np.abs(fp)) < bs_tol:
+            break
+
+    return xp

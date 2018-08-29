@@ -38,3 +38,11 @@ def chunks(it, size=100):
         if len(x) == 0:
             return
         yield x
+
+# merge dictionaries
+def merge(*ds, **kw):
+    ret = {}
+    for d in ds + [kw]:
+        for k, v in d.items():
+            ret[k] = v
+    return ret

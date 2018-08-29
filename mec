@@ -7,6 +7,7 @@ import click
 # screen commands
 cmd_stat = 'screen -S {unit} -Q select . > /dev/null 2>&1'
 cmd_start = 'screen -L -S {unit} -d -m {cmd}'
+cmd_shell = 'screen -L -S {unit} -d -m $SHELL -c "{cmd}"'
 cmd_kill = 'screen -S {unit} -X quit'
 cmd_log = 'less screenlog.0'
 cmd_tail = 'tail screenlog.0 {follow}'
@@ -61,8 +62,10 @@ def do_start(unit):
         print(f'{unit}: already running')
     else:
         print(f'{unit}: starting')
+        shell = info.get('shell', True)
+        cmd = cmd_shell if shell else cmd_start
         os.chdir(info['dir'])
-        os.system(cmd_start.format(unit=unit, cmd=info['cmd']))
+        os.system(cmd.format(unit=unit, cmd=info['cmd']))
         os.chdir(base_dir)
 
 def do_kill(unit):

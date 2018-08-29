@@ -223,7 +223,7 @@ def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None,
         y_vals = res.predict(xp_vals)
 
     # raw correlations
-    (corr, corr_pval) = corr_robust(datf_sel, x_var, y_var, wcol=w_var)
+    corr, corr_pval = corr_robust(datf_sel, x_var, y_var, wcol=w_var)
 
     # display regression results
     if reg_type != 'kernel':
@@ -264,7 +264,7 @@ def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None,
 
     # construct axes
     if ax is None:
-        (fig, ax) = plt.subplots(figsize=(7,5))
+        fig, ax = plt.subplots(figsize=(7,5))
     else:
         fig = ax.figure
 
@@ -334,11 +334,16 @@ def grid_plots(eqvars, x_vars, y_vars, shape, x_names=None, y_names=None,
         y_data = np.array([eqvars[yv1] for yv1 in yv]).T
         pfun(ax, x_data, y_data, **ea)
         ax.locator_params(nbins=7)
-        if xn is not None: ax.set_xlabel(xn)
-        if xr is not None: ax.set_xlim(xr)
-        if yn is not None: ax.set_title(yn)
-        if yr is not None: ax.set_ylim(yr)
-        if lg is not None: ax.legend(lg, loc=[ll if ll is not None else 'best'])
+        if xn is not None:
+            ax.set_xlabel(xn)
+        if xr is not None:
+            ax.set_xlim(xr)
+        if yn is not None:
+            ax.set_title(yn)
+        if yr is not None:
+            ax.set_ylim(yr)
+        if lg is not None:
+            ax.legend(lg, loc=[ll if ll is not None else 'best'])
 
     fig.subplots_adjust(bottom=0.15)
     fig.tight_layout()
@@ -384,12 +389,14 @@ def md_table(data, align=None, index=False, fmt='%s'):
     data = data.copy()
     cols = list(data.columns)
 
-    for c in cols:
-        dt = data.dtypes[c]
-        if dt == np.float64:
-            data[c] = data[c].apply(lambda x: fmt % x)
+    def to_string(x):
+        if x.dtype in (np.float32, np.float64):
+            return x.apply(lambda x: fmt % x)
         else:
-            data[c] = data[c].apply(str)
+            return x.apply(str)
+
+    data = data.apply(to_string)
+    data.index = to_string(pd.Series(data.index))
 
     if index:
         cols = [data.index.name or ''] + cols
@@ -402,10 +409,25 @@ def md_table(data, align=None, index=False, fmt='%s'):
     ralign = [' ' if x == 'l' else ':' for x in align]
 
     header = '| ' + ' | '.join([str(x) for x in cols]) + ' |'
-    hsep = '|' + '|'.join([la+('-'*max(1,len(x)))+ra for (x, la, ra) in zip(cols, lalign, ralign)]) + '|'
-    rows = ['| ' + (str(i)+' | ')*index + ' | '.join(row) + ' |' for (i, row) in data.iterrows()]
+    hsep = '|' + '|'.join([la+('-'*max(1,len(x)))+ra for x, la, ra in zip(cols, lalign, ralign)]) + '|'
+    rows = ['| ' + (i+' | ')*index + ' | '.join(row) + ' |' for i, row in data.iterrows()]
 
     return header + '\n' + hsep + '\n' + '\n'.join(rows)
+
+# for obscure but not unheard of use cases
+def parse_table_md(md):
+    split_row = lambda row: [s.strip() for s in row.split('|')[1:-1]]
+    lines = md.strip().split('\n')
+    head, dat = lines[0], lines[2:]
+    cols = split_row(head)
+    vals = [split_row(row) for row in dat]
+    frame = pd.DataFrame(vals, columns=cols)
+    for c in frame:
+        try:
+            frame[c] = pd.to_numeric(frame[c])
+        except:
+            pass
+    return frame
 
 ##
 ## star tables
