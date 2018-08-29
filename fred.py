@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from fredapi import Fred
 
-auth_name = 'fred_auth.txt'
+auth_name = 'fred.json'
 auth_path = os.path.join(os.path.dirname(__file__), auth_name)
 with open(auth_path) as fa:
     fred_auth = json.load(fa)
