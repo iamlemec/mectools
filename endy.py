@@ -37,6 +37,27 @@ def choose(d, f, axis=0):
 
     return g
 
+# like choose but d omits axis of choice
+def address0(d, f):
+    sd0 = f.shape[0]
+    sd1 = np.prod(f.shape[1:])
+    ic = sd1*d.reshape((-1,)) + np.arange(sd1)
+    return f.flat[ic].reshape(d.shape)
+
+def address(d, f, axis=0):
+    # swap to 0th axis
+    if axis != 0:
+        f = f.swapaxes(0, axis)
+
+    # broadcast trailing axes
+    if f.shape[1:] != d.shape:
+        f = np.broadcast_to(f, (f.shape[0],)+d.shape)
+
+    # apply with 0th version
+    g = address0(d, f)
+
+    return g
+
 # interpolate non-flat domains on a given axis
 def interp(x1, x0, f0, axis=0):
     N = len(x0)
