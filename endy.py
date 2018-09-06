@@ -80,7 +80,6 @@ def project(bins, xp=None, xlo=None, xhi=None, axis=-1):
     total[...,[-1]] += np.maximum(0, xhi - bhi[...,-1]) - np.maximum(0, xlo - bhi[...,-1])
     return total/(xhi-xlo)
 
-
 # binsearch over a vectorizable function
 # only flat for now - could accept axis in the future
 def binsearch_vec(fun, xmin, xmax, max_iter=64, bs_tol=1e-12):

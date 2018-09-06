@@ -32,7 +32,7 @@ class Bundle(object):
         return self.__dict__.items()
 
     def keys(self):
-        return self.__dict__.keys()
+        return list(self.__dict__.keys())
 
     def values(self):
         return self.__dict__.values()
@@ -99,11 +99,12 @@ def map(d,keys):
         return map(d,keys)
 
 # must have same keys
-def stack_bundles(bund_vec,agg_func=np.array):
-    return Bundle({k:agg_func([b[k] for b in bund_vec]) for k in bund_vec[0].keys()})
+def stack_bundles(bund_vec, agg_func=np.array, default=np.nan):
+    keys = set(sum([b.keys() for b in bund_vec], []))
+    return Bundle({k: agg_func([b.get(k, default) for b in bund_vec]) for k in keys})
 
 # param set tools
-def load_json(fname,ordered=False):
+def load_json(fname, ordered=False):
     if ordered:
         return json.load(open(fname),object_pairs_hook=collections.OrderedDict)
     else:

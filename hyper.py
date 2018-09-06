@@ -23,13 +23,6 @@ def iprogress(it, per=100, fmt='%s'):
             print(fmt % str(i))
     print(fmt % 'done')
 
-# generate chunk indices
-def ichunks(n, size=100):
-    i = 0
-    while i < n:
-        yield range(i, i + min(size, n - i))
-        i += size
-
 # generator of chunks
 def chunks(it, size=100):
     itr = iter(it)
@@ -39,10 +32,17 @@ def chunks(it, size=100):
             return
         yield x
 
+# generate chunk indices
+def ichunks(n, size=100):
+    i = 0
+    while i < n:
+        yield range(i, i + min(size, n - i))
+        i += size
+
 # merge dictionaries
 def merge(*ds, **kw):
     ret = {}
-    for d in ds + [kw]:
+    for d in ds + (kw,):
         for k, v in d.items():
             ret[k] = v
     return ret
