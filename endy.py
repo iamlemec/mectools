@@ -44,6 +44,7 @@ def address0(d, f):
     ic = sd1*d.reshape((-1,)) + np.arange(sd1)
     return f.flat[ic].reshape(d.shape)
 
+# address along a given axis
 def address(d, f, axis=0):
     # swap to 0th axis
     if axis != 0:
@@ -138,3 +139,7 @@ def binsearch_vec(fun, xmin, xmax, max_iter=64, bs_tol=1e-12):
             break
 
     return xp
+
+# golden section search over vector
+def goldsec_vec(fun, xmin, xmax, max_iter=64, tol=1e-12):
+    pass
