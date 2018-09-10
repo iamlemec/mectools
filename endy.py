@@ -1,6 +1,7 @@
 # endy - high dimensional array tools
 
 import numpy as np
+from scipy.constants import golden
 
 # digitize nd array
 def digitize(x, bins):
@@ -102,6 +103,13 @@ def project(bins, xp=None, xlo=None, xhi=None, axis=-1):
     total[...,[-1]] += np.maximum(0, xhi - bhi[...,-1]) - np.maximum(0, xlo - bhi[...,-1])
     return total/(xhi-xlo)
 
+# make sure it's a vector
+def ensure_vector(x, N):
+    if np.isscalar(x):
+        return x*np.ones(N)
+    else:
+        return np.array(x)
+
 # binsearch over a vectorizable function
 # only flat for now - could accept axis in the future
 def binsearch_vec(fun, xmin, xmax, max_iter=64, bs_tol=1e-12):
@@ -110,14 +118,8 @@ def binsearch_vec(fun, xmin, xmax, max_iter=64, bs_tol=1e-12):
     assert(len(f1) == N)
 
     # expand bounds if necessary
-    if np.isscalar(xmin):
-        x0 = xmin*np.ones(N)
-    else:
-        x0 = xmin.copy()
-    if np.isscalar(xmax):
-        x1 = xmax*np.ones(N)
-    else:
-        x1 = xmax.copy()
+    x0 = ensure_vector(xmin, N)
+    x1 = ensure_vector(xmax, N)
 
     # flip if needed
     swap = (f0 > f1)
@@ -141,5 +143,23 @@ def binsearch_vec(fun, xmin, xmax, max_iter=64, bs_tol=1e-12):
     return xp
 
 # golden section search over vector
-def goldsec_vec(fun, xmin, xmax, max_iter=64, tol=1e-12):
-    pass
+def goldsec_vec(fun, xmin, xmax, tol=1e-12):
+    val0, val1 = fun(xmin), fun(xmax) # testing sizes
+    N = len(val0)
+    assert(len(val1) == N)
+
+    a = ensure_vector(xmin, N)
+    b = ensure_vector(xmax, N)
+
+    c = b - (b-a)/golden
+    d = a + (b-a)/golden
+
+    while np.max(np.abs(c-d)) > tol:
+        sel = fun(c) < fun(d)
+        b[sel] = d[sel]
+        a[~sel] = c[~sel]
+
+        c = b - (b-a)/golden
+        d = a + (b-a)/golden
+
+    return (b+a)/2
