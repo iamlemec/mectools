@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-import json
+import pytoml as toml
 import click
 
 # screen commands
@@ -14,12 +14,12 @@ cmd_tail = 'tail screenlog.0 {follow}'
 
 # directories
 script_dir = os.path.dirname(os.path.realpath(__file__))
-data_path = os.path.join(script_dir, 'mec.json')
+data_path = os.path.join(script_dir, 'mec.toml')
 base_dir = os.getcwd()
 
 # get specification
 with open(data_path) as fid:
-    specs = json.load(fid)
+    specs = toml.load(fid)
 
 # operations
 def is_running(unit):
