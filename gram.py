@@ -1,6 +1,7 @@
 # diagram creator
 
 import math
+import numpy as np
 
 # native format is SVG + CSS
 # use cairosvg to convert to PDF/PNG
@@ -48,13 +49,16 @@ class Canvas:
 
 # shell element class
 class Element:
+    # store core attributes and extra attributes
     def __init__(self, tag, **attr):
         self.tag = tag
         self.attr = attr
 
+    # return dictionary of properties for the top level tag
     def props(self):
         return {}
 
+    # return string wrapper and inner content given
     def render(self, inner=None):
         attr0 = self.props()
         attr1 = dict(attr0, **self.attr)
@@ -64,41 +68,14 @@ class Element:
         else:
             return f'<{self.tag} {props}>\n{inner}\n</{self.tag}>'
 
-class Area(Element):
-    def __init__(self, children=[], **attr):
-        super().__init__()
+class Group(Element):
+    def __init__(self, tag='g', children=[], **attr):
+        super().__init__(tag, **attr)
         self.children = children
 
-    def add_child(self, child):
-        self.children.append(child)
-
     def render(self):
-        pass
-
-class Rows(Element):
-    def __init__(self, rows=[], **attr):
-        super().__init__()
-        self.rows = rows
-
-    def add_row(self, row):
-        self.rows.append(row)
-
-    def render(self):
-        pass
-
-class Cols(Element):
-    def __init__(self, cols=[], **kwargs):
-        super().__init__()
-        self.cols = cols
-
-    def add_row(self, col):
-        self.cols.append(col)
-
-    def render(self):
-        pass
-
-class Grid(Element):
-    pass
+        inner = '\n'.join([c.render() for c in self.children])
+        return super().render(inner)
 
 class Text(Element):
     def __init__(self, x, y, text, **attr):
@@ -131,7 +108,7 @@ class Line(Element):
             'x2': self.x2,
             'y2': self.y2,
             'stroke': 'black',
-            'stroke-width': 0.5
+            'stroke-width': 0.3
         }
 
 class Path(Element):
@@ -145,52 +122,59 @@ class Path(Element):
         return {
             'd': ' '.join(data),
             'stroke': 'black',
-            'stroke-width': 0.5,
+            'stroke-width': 0.3,
             'fill': 'none'
         }
 
-class Arrow(Element):
-    def __init__(self, x1, y1, x2, y2, theta=45, length=1, line_attr={}, arrow_attr={}, **attr):
-        super().__init__('g', **attr)
-        self.x1 = x1
-        self.y1 = y1
-        self.x2 = x2
-        self.y2 = y2
+class Arrow(Group):
+    def __init__(self, x1, y1, x2, y2, theta=45, length=1, **attr):
+        super().__init__(**attr)
 
-        self.theta = theta
-        self.length = length
-        self.line_attr = line_attr
-        self.arrow_attr= arrow_attr
+        # calculate arrow path
+        rtheta = math.radians(theta)
+        deg90 = math.radians(90)
 
-        self.generate()
+        xdir = 1 if x2 > x1 else -1
+        ydir = 1 if y2 > y1 else -1
 
-    def generate(self):
-        x1, y1, x2, y2 = self.x1, self.y1, self.x2, self.y2
-        rtheta = math.radians(self.theta)
+        gammah = math.atan((y2-y1)/(x2-x1)) if x1 != x2 else -ydir*deg90 # angle of line
+        gammal = deg90 - gammah # complement of angle
 
-        gamma = math.atan((x2-x1)/(y2-y1)) # angle of line
-        etah = gamma - rtheta # residual angle high
-        etal = math.radians(180) - gamma - rtheta # residual angle low
-        dxh, dyh = self.length*math.cos(etah), self.length*math.sin(etah)
-        dxl, dyl = self.length*math.cos(etal), self.length*math.sin(etal)
+        etah = gammah - rtheta # residual angle high
+        etal = gammal - rtheta # residual angle low
 
-        # print(f'gamma = {math.degrees(gamma)}')
+        dxh, dyh = length*math.cos(etah), length*math.sin(etah)
+        dxl, dyl = length*math.sin(etal), length*math.cos(etal)
+
+        pointh = (x2-xdir*dxh, y2-xdir*dyh)
+        pointl = (x2-xdir*dxl, y2-xdir*dyl)
+
+        # print(f'gammah = {math.degrees(gammah)}, gammal = {math.degrees(gammal)}')
         # print(f'etah = {math.degrees(etah)}, etal = {math.degrees(etal)}')
         # print(f'dxh = {dxh}, dyh = {dyh}')
         # print(f'dxl = {dxl}, dyl = {dyl}')
 
-        self.line = Line(x1, y1, x2, y2, **self.line_attr)
-        self.arrow = Path([(x2-dxh, y2-dyh), (x2, y2), (x2-dxl, y2-dyl)], **self.arrow_attr)
+        # generate children
+        line = Line(x1, y1, x2, y2)
+        arrow = Path([pointh, (x2, y2), pointl])
+        self.children = [line, arrow]
 
-    def props(self):
-        return {}
+class Axis(Group):
+    def __init__(self, x, y, orient, length, ticks, labels=None, **attr):
+        super().__init__(**attr)
 
-    def render(self):
-        inner = self.line.render() + '\n' + self.arrow.render()
-        return super().render(inner)
+        if orient == 'h' or orient == 'horizontal':
+            orient = 0
+        elif orient == 'v' or orient == 'vertical':
+            orient = 90
+        orient = math.radians(orient)
 
-class Image(Element):
-    pass
+        if type(ticks) is int:
+            ticks = np.linspace(0, length, ticks)
 
-class Plot(Area):
+        if labels is None:
+            labels = np.arange(len(ticks))
+        labels = [str(s) for s in labels]
+
+class Plot(Group):
     pass
