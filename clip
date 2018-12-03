@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+if [ "$1" == "set" ]; then
+    redis-cli "set" "$2" "$3"
+elif [ "$1" == "pipe" ]; then
+    redis-cli "set" "$2" "$(cat)"
+elif [ "$1" == "get" ]; then
+    redis-cli "get" "$2"
+fi

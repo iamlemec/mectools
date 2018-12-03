@@ -199,45 +199,38 @@ def digitize_mat(x,bins):
 
 # generate continuous rv by linearly interpolating using cmf approximations (columns of probs)
 # last row should be all ones
-def random_panel(probs,vals,interp=False):
-    (nbins,nf) = probs.shape
+def random_panel(probs, types, state=np.random):
+    ntypes, nbins = probs.shape
+    nf, = types.shape
     assert((np.log2(nbins)%1.0)==0.0) # only powers of two
-    assert(vals.shape==(nbins,))
 
     x = np.random.rand(nf)
     bstep = nbins >> 1
-    bpos = np.zeros(nf,dtype=np.int)
-    while bstep >= 1:
-        bcmp = bpos+bstep-1
-        bpos[x>probs[bcmp,range(nf)]] += bstep
+    bpos = np.zeros(nf, dtype=np.int)
+    while bstep > 0:
+        bcmp = bpos + bstep - 1
+        bsel = x > probs[types, bcmp]
+        bpos[bsel] += bstep
         bstep >>= 1
 
-    if interp:
-        xbin = x*nbins-bpos
-        return (1.0-xbin)*vals[bpos] + xbin*vals[bpos+1]
-    else:
-        return vals[bpos]
+    return bpos
 
 # generate continuous rv by linearly interpolating using cmf approximations
 # last element should be all ones
-def random_vec(probs,vals,nf):
-    (nbins,) = probs.shape
+def random_vec(probs, nf, state=np.random):
+    nbins, = probs.shape
     assert((np.log2(nbins)%1.0)==0.0) # only powers of two
-    assert(vals.shape==(nbins,))
 
-    x = np.random.rand(nf)
+    x = state.rand(nf)
     bstep = nbins >> 1
-    bpos = np.zeros(nf,dtype=np.int)
-    while bstep >= 1:
-        bcmp = bpos + bstep
-        bpos[x>probs[bcmp]] += bstep
-        bstep >> 1
+    bpos = np.zeros(nf, dtype=np.int)
+    while bstep > 0:
+        bcmp = bpos + bstep - 1
+        bsel = x > probs[bcmp]
+        bpos[bsel] += bstep
+        bstep >>= 1
 
-    if interp:
-        xbin = x*nbins-bpos
-        return (1.0-xbin)*vals[bpos] + xbin*vals[bpos+1]
-    else:
-        return vals[bpos]
+    return bpos
 
 def find(m):
     return np.nonzero(m)[0]

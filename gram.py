@@ -157,10 +157,11 @@ class Arrow(Group):
         # generate children
         line = Line(x1, y1, x2, y2)
         arrow = Path([pointh, (x2, y2), pointl])
+
         self.children = [line, arrow]
 
 class Axis(Group):
-    def __init__(self, x, y, orient, length, ticks, labels=None, **attr):
+    def __init__(self, x, y, orient, length, ticks, labels=None, tick_size=1, **attr):
         super().__init__(**attr)
 
         if orient == 'h' or orient == 'horizontal':
@@ -175,6 +176,19 @@ class Axis(Group):
         if labels is None:
             labels = np.arange(len(ticks))
         labels = [str(s) for s in labels]
+
+        dx = length*math.cos(orient)
+        dy = length*math.sin(orient)
+
+        tx = tick_size*math.sin(orient)
+        ty = tick_size*math.cos(orient)
+
+        points = [(dx*t, dy*t) for t in ticks]
+
+        arrow = Arrow(x, y, x+dx, y+dy)
+        lines = [Line(zx-tx, zy-ty, zx+tx, zy+ty) for zx, zy in points]
+
+        self.children = [arrow] + lines
 
 class Plot(Group):
     pass

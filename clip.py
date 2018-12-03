@@ -2,7 +2,7 @@ import json
 import redis
 
 class Clip:
-    def __init__(self, host='localhost', pot=6379):
+    def __init__(self, host='localhost', port=6379):
         self.__dict__['redis'] = redis.Redis(host=host, port=port, db=0)
 
     def __setattr__(self, key, value):

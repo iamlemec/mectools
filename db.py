@@ -16,25 +16,31 @@ class Connection:
     def __del__(self):
         pass
 
-    def tables(self, output=True):
-        ret = self.execa('select name from sqlite_master where type=\'table\'')
-        if output:
-            print('\n'.join([tn for (tn,) in ret]))
-        else:
-            return ret
-
-    def schema(self, name, output=True):
-        ret = self.execa('pragma table_info(\'%s\')' % name)
-        if output:
-            print('\n'.join(['{:<10s} {:s}'.format(t,n) for (i,n,t,_,_,_) in ret]))
-        else:
-            return ret
+    def close(self):
+        self.con.close()
 
     def commit(self):
         self.con.commit()
 
+    def tables(self, output=True):
+        ret = self.execa('select name from sqlite_master where type="table"')
+        if output:
+            print('\n'.join(sorted([tn for (tn,) in ret])))
+        else:
+            return ret
+
+    def schema(self, name, output=True):
+        ret = self.execa(f'pragma table_info("{name}")')
+        if output:
+            print('\n'.join([f'{t:<10s} {n:s}' for (i, n, t, _, _, _) in ret]))
+        else:
+            return ret
+
+    def size(self, name):
+        ret = self.execa(f'select count(*) from {name}')
+
     def exec(self, cmd, *args, commit=False, fetch=None, fetchall=False):
-        ret = self.con.execute(cmd,*args)
+        ret = self.con.execute(cmd, *args)
         if commit:
             self.commit()
         if fetchall:
@@ -68,7 +74,7 @@ def connect(db=None):
     kwargs = {'db': db} if db is not None else {}
     return Connection(**kwargs)
 
-def table_op(tname,schema):
+def table_op(tname, schema):
     def wrap(f):
         def f1(**kwargs):
             if 'db' in kwargs:
@@ -82,9 +88,9 @@ def table_op(tname,schema):
             else:
                 cur = con.cursor()
 
-            if kwargs.pop('clobber',False):
-                cur.execute('drop table if exists %s' % tname)
-            cur.execute('create table if not exists %s as %s' % (tname,schema))
+            if kwargs.pop('clobber', False):
+                cur.execute(f'drop table if exists {tname}')
+            cur.execute('create table if not exists %s as %s' % (tname, schema))
 
             f(cur,**kwargs)
 
