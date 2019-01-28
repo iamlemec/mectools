@@ -13,6 +13,7 @@ import matplotlib as mpl
 import matplotlib.pylab as plt
 import matplotlib.cm as cm
 import seaborn as sns
+from statsmodels.regression.linear_model import RegressionResultsWrapper
 
 ##
 ## statistics
@@ -365,26 +366,6 @@ def datf_eval(datf, formula, use_numpy=True):
 ## basic tables
 ##
 
-def latex_table(format, col_fmts, col_names, col_data, caption='', label='', figure=False):
-    col_fmts = ['{:'+cf+'}' for cf in col_fmts]
-    col_data = [[cf.format(v) for v in cd] for cf, cd in zip(col_fmts,col_data)]
-    tcode = ''
-    if figure:
-        tcode += '\\begin{table}[ht]\n'
-        tcode += '\\caption{' + caption + '}\n'
-        tcode += '\\label{' + label + '}\n'
-    tcode += '\\begin{center}\n'
-    tcode += '\\begin{tabular}{' + format + '} \\hline\n'
-    tcode += ' & '.join(['\\textbf{' + cn + '}' for cn in col_names])+' \\\\ \\hline\n'
-    for row in zip(*col_data):
-        tcode += ' & '.join(row) + ' \\\\' + '\n'
-    tcode = tcode[:-3] + '\n'
-    tcode += '\\end{tabular}\n'
-    tcode += '\\end{center}'
-    if figure:
-        tcode += '\n\\end{table}'
-    return tcode
-
 def latex_table(data, align=None, index=False, fmt='%s'):
     data = data.copy()
     cols = list(data.columns)
@@ -485,8 +466,18 @@ stats0 = {
     'F Statistic': 'fvalue'
 }
 
+def reg_dict(res):
+    return pd.concat({
+        'param': res.params,
+        'stderr': pd.Series(np.sqrt(res.cov_params().values.diagonal()), index=res.model.exog_names),
+        'pvalue': res.pvalues,
+    }, axis=1)
+
+def reg_stats(res, stats={}):
+    return pd.Series({lab: getattr(res, att, np.nan) for lab, att in stats.items()})
+
 # TODO: take extra stats dict, deal with nans
-def reg_table_tex(dres, labels={}, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=latex_escape, stats=stats0):
+def reg_table_tex(info, labels={}, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=latex_escape, stats=None, save=None):
     def num_func_def(x):
         if np.isnan(x):
             return ''
@@ -501,44 +492,49 @@ def reg_table_tex(dres, labels={}, note=None, num_fmt='%6.4f', num_func=None, pa
 
     def par_func_def(x):
         ret = num_func(x['param'])
-        if not np.isnan(x['pval']):
-            ret = '{%s}^{%s}' % (ret, star_map(x['pval']))
-        if not np.isnan(x['stder']):
-            ret = '$\\begin{array}{c} %s \\\\ (%s) \\end{array}$' % (ret, num_func(x['stder']))
+        if not np.isnan(x['pvalue']):
+            ret = '{%s}^{%s}' % (ret, star_map(x['pvalue']))
+        if not np.isnan(x['stderr']):
+            ret = '$\\begin{array}{c} %s \\\\ (%s) \\end{array}$' % (ret, num_func(x['stderr']))
         return ret
     if par_func is None:
         par_func = par_func_def
 
-    nres = len(dres)
-    regs = list(dres)
-
-    info = pd.concat([pd.DataFrame({
-        (col, 'param'): res.params,
-        (col, 'stder'): np.sqrt(res.cov_params().values.diagonal()),
-        (col, 'pval' ): res.pvalues
-    }) for col, res in dres.items()], axis=1)
+    # see if it's a dict of regression results and if so turn it into a table
+    # with (reg, stat) columns and (exog_name) rows. otherwise, should aleady 
+    # be one of these.
+    if type(info) is dict:
+        stats = pd.concat({col: reg_stats(res, stats) for col, res in info.items()}, axis=1)
+        info = pd.concat({col: reg_dict(res) for col, res in info.items()}, axis=1)
+    regs = list(info.columns.levels[0])
+    nres = len(regs)
     if len(labels) > 0:
-        info = info.loc[labels].rename(labels)
+        info = info.rename(labels, axis=0)
 
     tcode = ''
     tcode += '\\begin{tabular}{l%s}\n' % ('c'*nres)
     tcode += '\\toprule\n'
-    tcode += '& ' + ' & '.join([escape(s) for s in dres]) + ' \\\\\n'
+    tcode += '& ' + ' & '.join([escape(s) for s in regs]) + ' \\\\\n'
     tcode += '\\midrule\n'
     tcode += '\\\\\n'
     for i, v in info.iterrows():
         vp = v.unstack(level=-1)
-        tcode += i +  ' & ' + ' & '.join([par_func(x) for i, x in vp[['param', 'stder', 'pval']].loc[regs].iterrows()]) + ' \\\\\n'
+        tcode += i +  ' & ' + ' & '.join([par_func(x) for j, x in vp[['param', 'stderr', 'pvalue']].loc[regs].iterrows()]) + ' \\\\\n'
         tcode += '\\\\\n'
     tcode += '\\midrule\n'
-    for lab, att in stats.items():
-        tcode += lab + ' & ' + ' & '.join([num_func(getattr(res, att, np.nan)) for res in dres.values()]) + ' \\\\\n'
+    if stats is not None:
+        for i, v in stats.iterrows():
+            tcode += i + ' & ' + ' & '.join([num_func(x) for j, x in v.iteritems()]) + ' \\\\\n'
     tcode += '\\bottomrule\n'
     if note is not None:
         tcode += '\\textit{Note:} & \\multicolumn{%d}{r}{%s}\n' % (nres, escape(note))
     tcode += '\\end{tabular}\n'
 
-    return tcode
+    if save is None:
+        return tcode
+    else:
+        with open(save, 'w+') as fout:
+            fout.write(tcode)
 
 latex_template = """\\documentclass{article}
 \\usepackage{amsmath}
