@@ -23,23 +23,35 @@ class Connection:
         self.con.commit()
 
     def tables(self, output=True):
-        ret = self.execa('select name from sqlite_master where type="table"')
+        ret = self.con.execute('select name from sqlite_master where type="table"').fetchall()
+        tabs = sorted([tn for (tn,) in ret])
         if output:
-            print('\n'.join(sorted([tn for (tn,) in ret])))
+            print('\n'.join(tabs))
         else:
-            return ret
+            return tabs
 
     def schema(self, name, output=True):
-        ret = self.execa(f'pragma table_info("{name}")')
+        ret = self.con.execute(f'pragma table_info("{name}")').fetchall()
+        cols = [(n, t) for _, n, t, _, _, _ in ret]
         if output:
-            print('\n'.join([f'{t:<10s} {n:s}' for (i, n, t, _, _, _) in ret]))
+            print('\n'.join([f'{t:<10s} {n:s}' for n, t in cols]))
         else:
-            return ret
+            return cols
+
+    def create(self, name, schema):
+        if type(schema) is dict:
+            schema = [(n, t) for n, t in schema.items()]
+        fields = ', '.join([f'{n} {t}' for n, t in schema])
+        self.con.execute(f'create table if not exists {name} ({fields})')
+
+    def delete(self, name):
+        self.con.execute(f'drop table if exists {name}')
 
     def size(self, name):
-        ret = self.execa(f'select count(*) from {name}')
+        ret = self.con.execute(f'select count(*) from {name}').fetchall()
+        return ret[0][0]
 
-    def exec(self, cmd, *args, commit=False, fetch=None, fetchall=False):
+    def select(self, cmd, *args, commit=False, fetch=None, fetchall=False):
         ret = self.con.execute(cmd, *args)
         if commit:
             self.commit()
@@ -49,15 +61,7 @@ class Connection:
             ret = ret.fetchmany(fetch)
         return ret
 
-    def execa(self, cmd, *args, **kwargs):
-        kwargs['fetchall'] = True
-        return self.exec(cmd, *args, **kwargs)
-
-    def execn(self, cmd, n, *args, **kwargs):
-        kwargs['fetch'] = n
-        return self.exec(cmd, *args, **kwargs)
-
-    def table(self, name, columns=None, cond=None, frame=False, **kwargs):
+    def table(self, name, columns=None, cond=None, frame=True, **kwargs):
         if columns is None:
             cols = '*'
         else:
@@ -68,7 +72,15 @@ class Connection:
         if frame:
             return pd.read_sql(cmd, self.con, **kwargs)
         else:
-            return zip(*self.execa(cmd, **kwargs))
+            kwargs = {'fetchall': True, **kwargs}
+            return zip(*self.select(cmd, **kwargs))
+
+    def insert(self, table, data, n=None):
+        if n is None:
+            n = len(data[0])
+        qs = ','.join('?'*n)
+        cmd = f'insert into {table} values ({qs})'
+        self.con.executemany(cmd, data)
 
 def connect(db=None):
     kwargs = {'db': db} if db is not None else {}

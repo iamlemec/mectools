@@ -385,7 +385,7 @@ def latex_table(format, col_fmts, col_names, col_data, caption='', label='', fig
         tcode += '\n\\end{table}'
     return tcode
 
-def md_table(data, align=None, index=False, fmt='%s'):
+def latex_table(data, align=None, index=False, fmt='%s'):
     data = data.copy()
     cols = list(data.columns)
 
@@ -400,6 +400,37 @@ def md_table(data, align=None, index=False, fmt='%s'):
 
     if index:
         cols = [data.index.name or ''] + cols
+    if align is None:
+        align = 'l'
+    if len(align) == 1:
+        align = align*len(cols)
+
+    header = ' & '.join([f'\\textbf{{{c}}}' for c in cols])
+    rows = [(i+' & ')*index + ' & '.join(row) for i, row in data.iterrows()]
+
+    tcode = ''
+    tcode += '\\begin{tabular}{' + align + '} \\hline\n'
+    tcode += header + ' \\\\ \\hline\n'
+    tcode += ' \\\\\n'.join(rows) + '\n'
+    tcode += '\\end{tabular}'
+
+    return tcode
+
+def md_table(data, align=None, index=False, fmt='%s'):
+    data = data.copy()
+    cols = list(data.columns)
+
+    def to_string(x):
+        if x.dtype in (np.float32, np.float64):
+            return x.apply(lambda x: fmt % x)
+        else:
+            return x.apply(str)
+
+    data = data.apply(to_string)
+    data.index = to_string(pd.Series(data.index))
+
+    if index:
+        cols = [data.index.name or '-'] + cols
     if align is None:
         align = 'l'
     if len(align) == 1:
@@ -497,7 +528,7 @@ def reg_table_tex(dres, labels={}, note=None, num_fmt='%6.4f', num_func=None, pa
     tcode += '\\\\\n'
     for i, v in info.iterrows():
         vp = v.unstack(level=-1)
-        tcode += i +  '& ' + ' & '.join([par_func(x) for i, x in vp[['param', 'stder', 'pval']].loc[regs].iterrows()]) + ' \\\\\n'
+        tcode += i +  ' & ' + ' & '.join([par_func(x) for i, x in vp[['param', 'stder', 'pval']].loc[regs].iterrows()]) + ' \\\\\n'
         tcode += '\\\\\n'
     tcode += '\\midrule\n'
     for lab, att in stats.items():
@@ -567,8 +598,8 @@ def reg_table_md(dres, labels={}, order=None, note=None, num_fmt='%6.4f', num_fu
     if len(labels) > 0: info = info.loc[labels].rename(labels)
 
     tcode = ''
-    tcode += '| | ' + ' | '.join([escape(s) for s in dres]) + ' |\n'
-    tcode += '| - |' + ' - | - '*nres + '|\n'
+    tcode += '| - | ' + ' | '.join([escape(s) for s in dres]) + ' |\n'
+    tcode += '| - |' + ' - |'*nres + '\n'
     for i, v in info.iterrows():
         vp = v.unstack(level=-1)
         tcode += '| ' + i +  ' | ' + ' | '.join([par_func(x) for i, x in vp[['param', 'stder', 'pval']].loc[regs].iterrows()]) + ' |\n'
