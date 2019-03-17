@@ -476,7 +476,7 @@ def reg_stats(res, stats={}):
     return pd.Series({lab: getattr(res, att, np.nan) for lab, att in stats.items()})
 
 # TODO: take extra stats dict, deal with nans
-def reg_table_tex(info, labels={}, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=latex_escape, stats=None, save=None):
+def reg_table_tex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=latex_escape, stats=None, save=None):
     def num_func_def(x):
         if np.isnan(x):
             return ''
@@ -500,25 +500,42 @@ def reg_table_tex(info, labels={}, note=None, num_fmt='%6.4f', num_func=None, pa
         par_func = par_func_def
 
     # see if it's a dict of regression results and if so turn it into a table
-    # with (reg, stat) columns and (exog_name) rows. otherwise, should aleady 
+    # with (reg, stat) columns and (exog_name) rows. otherwise, should aleady
     # be one of these.
     if type(info) is dict:
         stats = pd.concat({col: reg_stats(res, stats) for col, res in info.items()}, axis=1)
         info = pd.concat({col: reg_dict(res) for col, res in info.items()}, axis=1)
-    regs = list(info.columns.levels[0])
-    nres = len(regs)
-    if len(labels) > 0:
-        info = info.rename(labels, axis=0)
+
+    # handle column name and order
+    if columns is not None:
+        corder = list(columns.values())
+        info = info[list(columns)]
+        if type(columns) is dict:
+            info = info.rename(columns, axis=1)
+    else:
+        corder = list(info.columns.levels[0])
+    ncol = len(corder)
+
+
+    # handle row name and order
+    if labels is not None:
+        lorder = list(labels.values())
+        info = info.loc[list(labels)]
+        if type(labels) is dict:
+            info = info.rename(labels, axis=0)
+    else:
+        lorder = list(info.index)
+    nrow = len(lorder)
 
     tcode = ''
-    tcode += '\\begin{tabular}{l%s}\n' % ('c'*nres)
+    tcode += '\\begin{tabular}{l%s}\n' % ('c'*ncol)
     tcode += '\\toprule\n'
-    tcode += '& ' + ' & '.join([escape(s) for s in regs]) + ' \\\\\n'
+    tcode += '& ' + ' & '.join([escape(s) for s in corder]) + ' \\\\\n'
     tcode += '\\midrule\n'
     tcode += '\\\\\n'
     for i, v in info.iterrows():
         vp = v.unstack(level=-1)
-        tcode += i +  ' & ' + ' & '.join([par_func(x) for j, x in vp[['param', 'stderr', 'pvalue']].loc[regs].iterrows()]) + ' \\\\\n'
+        tcode += i +  ' & ' + ' & '.join([par_func(x) for j, x in vp[['param', 'stderr', 'pvalue']].loc[corder].iterrows()]) + ' \\\\\n'
         tcode += '\\\\\n'
     tcode += '\\midrule\n'
     if stats is not None:
@@ -526,7 +543,7 @@ def reg_table_tex(info, labels={}, note=None, num_fmt='%6.4f', num_func=None, pa
             tcode += i + ' & ' + ' & '.join([num_func(x) for j, x in v.iteritems()]) + ' \\\\\n'
     tcode += '\\bottomrule\n'
     if note is not None:
-        tcode += '\\textit{Note:} & \\multicolumn{%d}{r}{%s}\n' % (nres, escape(note))
+        tcode += '\\textit{Note:} & \\multicolumn{%d}{r}{%s}\n' % (ncol, escape(note))
     tcode += '\\end{tabular}\n'
 
     if save is None:
