@@ -163,3 +163,45 @@ def goldsec_vec(fun, xmin, xmax, tol=1e-12):
         d = a + (b-a)/golden
 
     return (b+a)/2
+
+# stack with flat support
+def vstack(v):
+    if len(v) == 0:
+        return np.array([])
+    if v[0].ndim == 1:
+        return np.concat(v)
+    else:
+        return np.vstack(v)
+
+# finite differencing
+def deriv(y, x, axis=0, direc='both', pad=True):
+    # arrange axes allowing for case of flat x
+    if axis != 0:
+        y = y.swapaxes(0, axis)
+        if x.ndim > 1:
+            x = x.swapaxes(0, axis)
+
+    # expand x if it is flat
+    if y.ndim > x.ndim:
+        x = expand(x, dims=y.ndim-x.ndim)
+
+    # perform differencing
+    if direc == 'both':
+        der = (y[2:,...]-y[:-2,...])/(x[2:,...]-x[:-2,...])
+    elif direc in ('left', 'right'):
+        der = (y[1:,...]-y[:-1,...])/(x[1:,...]-x[:-1,...])
+
+    # optionally pad edges
+    if pad:
+        if direc == 'both':
+            der = vstack([der[[0],...], der, der[[-1],...]])
+        elif direc == 'left':
+            der = vstack([der[[0],...], der])
+        elif direc == 'right':
+            der = vstack([der, der[[-1],...]])
+
+    # revert axes swap
+    if axis != 0:
+        der = der.swapaxes(0, axis)
+
+    return der

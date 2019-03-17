@@ -10,7 +10,6 @@ import scipy.stats as stats
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import matplotlib as mpl
-import matplotlib.pylab as plt
 import matplotlib.cm as cm
 import seaborn as sns
 from statsmodels.regression.linear_model import RegressionResultsWrapper
@@ -165,7 +164,7 @@ def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None,
               x_range=None, y_range=None, x_name=None, y_name=None, title='',
               reg_type=None, size_scale=1.0, winsor=None, graph_squeeze=0.05,
               alpha=0.8, color_skew=0.5, style=None, palette=None,
-              despine=None, grid=None, logx=False, logy=False, loglog=False):
+              grid=None, logx=False, logy=False, loglog=False):
     # shallow copy
     datf = datf.copy()
 
@@ -265,9 +264,8 @@ def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None,
 
     # construct axes
     if ax is None:
-        fig, ax = plt.subplots(figsize=(7,5))
-    else:
-        fig = ax.figure
+        import matplotlib.pyplot as plt
+        _, ax = plt.subplots(figsize=(7,5))
 
     # execute plots
     ax.scatter(datf_sel[x_var], datf_sel[y_var], s=20.0*size_scale*wgt_norm, color=color_vals, alpha=alpha)
@@ -279,19 +277,20 @@ def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None,
     ax.set_xlabel(x_name)
     ax.set_ylabel(y_name)
     ax.set_title(title)
-    if despine: sns.despine(fig,ax)
     if grid: ax.grid(grid)
 
     # return
     if reg_type != 'kernel':
-        return fig, ax, res
+        return ax, res
     else:
-        return fig, ax
+        return ax
 
 def grid_plots(eqvars, x_vars, y_vars, shape, x_names=None, y_names=None,
                x_ranges=None, y_ranges=None, legends=None, legend_locs=None,
                figsize=(5, 4.5), fontsize=None, file_name=None,
                show_graphs=True, pcmd='plot', extra_args={}):
+    import matplotlib.pyplot as plt
+
     if pcmd == 'bar':
         color_cycle = mpl.rcParams['axes.prop_cycle']
         def pfun(ax, x_data, y_data, **kwargs):
@@ -667,3 +666,7 @@ def clustered_covmat(ret, ids1, ids2=None):
 def clustered_regression(datf, reg, cid):
     ret = smf.ols(reg, data=datf).fit()
     return clustered_covmat(ret, datf[cid].values)
+
+def dyadic_regression(datf, reg, cid1, cid2):
+    ret = smf.ols(reg, data=datf).fit()
+    return clustered_covmat(ret, datf[cid1].values, datf[cid2].values)
