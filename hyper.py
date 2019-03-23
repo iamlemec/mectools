@@ -36,7 +36,7 @@ def chunks(it, size=100):
 def ichunks(n, size=100):
     i = 0
     while i < n:
-        yield range(i, i + min(size, n - i))
+        yield i, i + min(size, n - i)
         i += size
 
 # merge dictionaries
