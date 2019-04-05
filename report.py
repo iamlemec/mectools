@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 import statsmodels as sm
@@ -196,24 +197,32 @@ def regtab_latex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', nu
 latex_template = """\\documentclass{article}
 \\usepackage{amsmath}
 \\usepackage{booktabs}
-\\usepackage[margin=0in]{geometry}
+\\usepackage[margin=1in]{geometry}
 \\begin{document}
 \\thispagestyle{empty}
 
 %s
 \\end{document}"""
 
-def save_latex(direc, fname, latex, wrap=True, crop=True):
-    ttex = latex_template % latex if wrap else latex
-    hdir = os.getcwd()
-    os.chdir(direc)
-    ftex = open('%s.tex' % fname, 'w+')
-    ftex.write(ttex)
-    ftex.close()
-    os.system('latex %s.tex' % fname)
-    os.system('dvipdf %s.dvi' % fname)
-    if crop: os.system('pdfcrop %s.pdf %s.pdf' % (fname, fname))
-    os.chdir(hdir)
+def save_latex(latex, fname, direc=None, wrap=True, crop=False):
+    if direc is None:
+        direc, fname = os.path.split(fname)
+    if direc != '':
+        hdir = os.getcwd()
+        os.chdir(direc)
+    else:
+        hdir = None
+
+    with open('%s.tex' % fname, 'w+') as fid:
+        fid.write(latex_template % latex if wrap else latex)
+
+    os.system('pdflatex %s.tex' % fname)
+
+    if crop:
+        os.system('pdfcrop %s.pdf %s.pdf' % (fname, fname))
+
+    if hdir is not None:
+        os.chdir(hdir)
 
 def markdown_escape(s):
     s1 = s.replace('*', '\\*')
@@ -274,7 +283,12 @@ def graph_latex(img, args=''):
         args = f'[{args}]'
     return '\\includegraphics%s{%s}' % (args, img)
 
-def float_latex(env, text, label=None, caption=None):
+float_template = """\\begin{%(env)s}%(pos)s
+\\centering
+%(label)s%(caption)s%(text)s
+\\end{%(env)s}"""
+
+def float_latex(env, text, label=None, caption=None, pos='h'):
     if label is not None:
         label = '\\label{%s}\n' % label
     else:
@@ -283,10 +297,24 @@ def float_latex(env, text, label=None, caption=None):
         caption = '\\caption{%s}\n' % caption
     else:
         caption = ''
-    return '\\begin{%s}\n%s%s%s\n\\end{%s}' % (env, label, caption, text, env)
+    if pos in [None, '']:
+        pos = ''
+    else:
+        pos = f'[{pos}]'
 
-def report_latex(info):
+    return float_template % {
+        'env': env,
+        'pos': pos,
+        'label': label,
+        'caption': caption,
+        'text': text
+    }
+
+def report_latex(info, save=None):
     if type(info) is dict:
         info = [{'label': k, **v} for k, v in info.items()]
     body = '\n\n'.join([float_latex(**dat) for dat in info])
-    return latex_template % body
+    if save:
+        save_latex(body, save)
+    else:
+        return body
