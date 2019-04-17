@@ -1,4 +1,5 @@
 import os
+import re
 import numpy as np
 import pandas as pd
 import statsmodels as sm
@@ -97,8 +98,8 @@ def star_map(pv, star='*'):
     return sig
 
 def latex_escape(s):
-    s1 = s.replace('_', '\\_')
-    return s1
+    s = re.sub(r'([_&])', r'\\\1', s)
+    return s
 
 stats0 = {
     'N': 'nobs',
@@ -158,7 +159,6 @@ def regtab_latex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', nu
         corder = list(info.columns.levels[0])
     ncol = len(corder)
 
-
     # handle row name and order
     if labels is not None:
         lorder = list(labels.values())
@@ -177,16 +177,16 @@ def regtab_latex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', nu
     tcode += '\\\\\n'
     for i, v in info.iterrows():
         vp = v.unstack(level=-1)
-        tcode += i +  ' & ' + ' & '.join([par_func(x) for j, x in vp[['param', 'stderr', 'pvalue']].loc[corder].iterrows()]) + ' \\\\\n'
+        tcode += escape(i) +  ' & ' + ' & '.join([par_func(x) for j, x in vp[['param', 'stderr', 'pvalue']].loc[corder].iterrows()]) + ' \\\\\n'
         tcode += '\\\\\n'
     tcode += '\\midrule\n'
     if stats is not None:
         for i, v in stats.iterrows():
-            tcode += i + ' & ' + ' & '.join([num_func(x) for j, x in v.iteritems()]) + ' \\\\\n'
+            tcode += escape(i) + ' & ' + ' & '.join([num_func(x) for j, x in v.iteritems()]) + ' \\\\\n'
     tcode += '\\bottomrule\n'
     if note is not None:
         tcode += '\\textit{Note:} & \\multicolumn{%d}{r}{%s}\n' % (ncol, escape(note))
-    tcode += '\\end{tabular}\n'
+    tcode += '\\end{tabular}'
 
     if save is None:
         return tcode
@@ -202,6 +202,7 @@ latex_template = """\\documentclass{article}
 \\thispagestyle{empty}
 
 %s
+
 \\end{document}"""
 
 def save_latex(latex, fname, direc=None, wrap=True, crop=False):
@@ -228,7 +229,7 @@ def markdown_escape(s):
     s1 = s.replace('*', '\\*')
     return s1
 
-def regtab_markdown(dres, labels={}, order=None, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=markdown_escape, stats=stats0, fname=None):
+def regtab_markdown(info, labels={}, order=None, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=markdown_escape, stats=stats0, fname=None):
     def num_func_def(x):
         if np.isnan(x):
             return ''
@@ -251,24 +252,24 @@ def regtab_markdown(dres, labels={}, order=None, note=None, num_fmt='%6.4f', num
     if par_func is None:
         par_func = par_func_def
 
-    nres = len(dres)
-    regs = list(dres)
+    nres = len(info)
+    regs = list(info)
 
-    info = pd.concat([pd.DataFrame({
+    data = pd.concat([pd.DataFrame({
         (col, 'param'): res.params,
         (col, 'stder'): np.sqrt(res.cov_params().values.diagonal()),
         (col, 'pval' ): res.pvalues
-    }) for col, res in dres.items()], axis=1)
-    if len(labels) > 0: info = info.loc[labels].rename(labels)
+    }) for col, res in info.items()], axis=1)
+    if len(labels) > 0: data = data.loc[labels].rename(labels)
 
     tcode = ''
-    tcode += '| - | ' + ' | '.join([escape(s) for s in dres]) + ' |\n'
+    tcode += '| - | ' + ' | '.join([escape(s) for s in info]) + ' |\n'
     tcode += '| - |' + ' - |'*nres + '\n'
-    for i, v in info.iterrows():
+    for i, v in data.iterrows():
         vp = v.unstack(level=-1)
         tcode += '| ' + i +  ' | ' + ' | '.join([par_func(x) for i, x in vp[['param', 'stder', 'pval']].loc[regs].iterrows()]) + ' |\n'
     for lab, att in stats.items():
-        tcode += '| ' + lab + ' | ' + ' | '.join([num_func(getattr(res, att, np.nan)) for res in dres.values()]) + ' |\n'
+        tcode += '| ' + lab + ' | ' + ' | '.join([num_func(getattr(res, att, np.nan)) for res in info.values()]) + ' |\n'
     if note is not None:
         tcode += '*Note:* ' + escape(note)
 
@@ -288,7 +289,7 @@ float_template = """\\begin{%(env)s}%(pos)s
 %(label)s%(caption)s%(text)s
 \\end{%(env)s}"""
 
-def float_latex(env, text, label=None, caption=None, pos='h'):
+def float_latex(env, data=None, text=None, label=None, caption=None, pos='h'):
     if label is not None:
         label = '\\label{%s}\n' % label
     else:
@@ -302,6 +303,12 @@ def float_latex(env, text, label=None, caption=None, pos='h'):
     else:
         pos = f'[{pos}]'
 
+    if text is None:
+        if env == 'table':
+            text = regtab_latex(**data)
+        elif env == 'figure':
+            text = graph_latex(**data)
+
     return float_template % {
         'env': env,
         'pos': pos,
@@ -313,7 +320,7 @@ def float_latex(env, text, label=None, caption=None, pos='h'):
 def report_latex(info, save=None):
     if type(info) is dict:
         info = [{'label': k, **v} for k, v in info.items()]
-    body = '\n\n'.join([float_latex(**dat) for dat in info])
+    body = '\n\n'.join([float_latex(**fig) for fig in info])
     if save:
         save_latex(body, save)
     else:

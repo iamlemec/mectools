@@ -101,6 +101,11 @@ def stat(unit):
 
 @cli.command()
 @click.argument('unit', required=False)
+def status(unit):
+    dispatch(do_stat, unit)
+
+@cli.command()
+@click.argument('unit', required=False)
 def start(unit):
     dispatch(do_start, unit)
 
