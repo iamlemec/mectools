@@ -21,3 +21,31 @@ def plotter(pyplot=True, backend='GTK3Agg', theme=['clean'], rc={}):
     if pyplot:
         import matplotlib.pyplot as plt
         return plt
+
+# define the theme by returning the dictionary of configurations
+def altair(size=14):
+    def theme():
+        return {
+            'config': {
+                'view': {
+                    'height': 300,
+                    'width': 400,
+                    'strokeWidth': 0
+                },
+                'axis': {
+                    'grid': False,
+                    'domainColor': 'black',
+                    'tickColor': 'black',
+                    'titleFontSize': size,
+                    'labelFontSize': size
+                },
+                'legend': {
+                    'titleFontSize': size,
+                    'labelFontSize': size
+                }
+            }
+        }
+    import altair as alt
+    alt.themes.register('mec', theme)
+    alt.themes.enable('mec')
+    return alt

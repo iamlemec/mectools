@@ -7,19 +7,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# plotting config
-plt.ioff()
-sns.set(style='ticks',rc={'axes.titlesize': 18,
-                          'axes.labelsize': 18,
-                          'xtick.labelsize': 18,
-                          'ytick.labelsize': 18,
-                          'legend.fontsize': 14,
-                          'figure.autolayout': True,
-                          'lines.linewidth': 2.5})
-sns.set_context(rc={'lines.markeredgewidth': 0.1})
-
 # defaults
-figsize0 = (5.0, 4.0)
+figsize0 = 5, 4
 
 def save_plot(yvars=None, xvar='index', fname=None, data=None, title=None, labels=None, xlabel=None, ylabel=None, legend=True, xlim=None, ylim=None, figsize=figsize0, despine=True, tight=True, facecolor='white'):
     if yvars is None:
@@ -65,24 +54,21 @@ def save_plot(yvars=None, xvar='index', fname=None, data=None, title=None, label
         save_fig(fig, fname)
         plt.close(fig)
 
-def scatter_label(xvar, yvar, data, ax=None, title=None, labels=True, xlabel=None, ylabel=None, xlim=None, ylim=None, figsize=(8,6)):
+def scatter_label(xvar, yvar, data, labels=True, offset=0.02, ax=None):
     df = data[[xvar, yvar]].dropna()
 
     if ax is None:
-        (_, ax) = plt.subplots(figsize=figsize)
+        _, ax = plt.subplots()
     df.plot.scatter(x=xvar, y=yvar, s=0, ax=ax)
 
-    if xlim: ax.set_xlim(xlim)
-    if ylim: ax.set_ylim(ylim)
-    if title: ax.set_title(title)
-    if xlabel: ax.set_xlabel(xlabel)
-    if ylabel: ax.set_ylabel(ylabel)
+    ymin, ymax = ax.get_ylim()
+    xmin, xmax = ax.get_xlim()
+    ylim, xlim = ymax - ymin, xmax - xmin
 
-    labvals = df.index if labels in ['index',True] else df[labels]
+    labvals = df.index if labels in ('index', True) else df[labels]
     for txt in labvals.values:
-        (ymin, ymax) = ax.get_ylim()
-        (xmin, xmax) = ax.get_xlim()
-        ax.annotate(txt, (df[xvar].ix[txt]-0.02*(xmax-xmin), df[yvar].ix[txt]-0.02*(ymax-ymin)))
+        point = df[xvar].ix[txt] - offset*xlim, df[yvar].ix[txt] - offset*ylim
+        ax.annotate(txt, point)
 
     return ax
 
