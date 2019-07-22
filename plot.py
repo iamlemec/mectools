@@ -47,17 +47,14 @@ def save_plot(yvars=None, xvar='index', data=None, title=None, labels=None, xlab
 
     return fig
 
-def scatter_label(xvar, yvar, data, ax=None, title=None, labels=True, xlabel=None, ylabel=None, xlim=None, ylim=None, figsize=(8,6)):
+def scatter_label(xvar, yvar, data, labels=True, offset=0.02, ax=None):
     df = data[[xvar, yvar]].dropna()
-
     if ax is None: _, ax = plt.subplots(figsize=figsize)
     df.plot.scatter(x=xvar, y=yvar, s=0, ax=ax)
 
-    if xlim: ax.set_xlim(xlim)
-    if ylim: ax.set_ylim(ylim)
-    if title: ax.set_title(title)
-    if xlabel: ax.set_xlabel(xlabel)
-    if ylabel: ax.set_ylabel(ylabel)
+    ymin, ymax = ax.get_ylim()
+    xmin, xmax = ax.get_xlim()
+    ylim, xlim = ymax - ymin, xmax - xmin
 
     labvals = df.index if labels in ('index', True) else df[labels]
     for txt in labvals.values:
