@@ -422,3 +422,28 @@ def clustered_regression(datf, reg, cid):
 def dyadic_regression(datf, reg, cid1, cid2):
     ret = smf.ols(reg, data=datf).fit()
     return clustered_covmat(ret, datf[cid1].values, datf[cid2].values)
+
+##
+## reading common data sources
+##
+
+def world_bank(data, reshape=True, label='value'):
+    if type(data) is str:
+        data = pd.read_excel(data, sheet_name='Data', skiprows=3)
+
+    # same as PWT
+    data = data.rename({'Country Code': 'countrycode'}, axis=1)
+    data = data.set_index('countrycode')
+
+    # filter out non-year columns
+    data = data.filter(regex=r'\d\d\d\d')
+    data.columns = data.columns.astype(np.int)
+    data = data.rename_axis('year', axis=1)
+
+    # reshape from wide to long
+    if reshape:
+        data = data.stack()
+        data = data.rename(label)
+        data = data.reset_index()
+
+    return data

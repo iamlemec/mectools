@@ -15,7 +15,7 @@ def plotter(pyplot=True, backend='GTK3Agg', theme=['clean'], rc={}):
         def hist(*args, **kwargs):
             if 'grid' not in kwargs:
                 kwargs['grid'] = False
-            pd.Series.hist0(*args, **kwargs)
+            return pd.Series.hist0(*args, **kwargs)
         setattr(pd.Series, 'hist', hist)
 
     if pyplot:

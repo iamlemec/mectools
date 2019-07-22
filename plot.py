@@ -5,23 +5,11 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
-
-# plotting config
-plt.ioff()
-sns.set(style='ticks',rc={'axes.titlesize': 18,
-                          'axes.labelsize': 18,
-                          'xtick.labelsize': 18,
-                          'ytick.labelsize': 18,
-                          'legend.fontsize': 14,
-                          'figure.autolayout': True,
-                          'lines.linewidth': 2.5})
-sns.set_context(rc={'lines.markeredgewidth': 0.1})
 
 # defaults
-figsize0 = (5.0, 4.0)
+figsize0 = 5, 4
 
-def save_plot(yvars=None, xvar='index', fname=None, data=None, title=None, labels=None, xlabel=None, ylabel=None, legend=True, xlim=None, ylim=None, figsize=figsize0, despine=True, tight=True, facecolor='white'):
+def save_plot(yvars=None, xvar='index', data=None, title=None, labels=None, xlabel=None, ylabel=None, legend=True, xlim=None, ylim=None, figsize=figsize0, tight=True):
     if yvars is None:
         yvars = list(data.columns)
     if type(yvars) is np.ndarray:
@@ -42,7 +30,7 @@ def save_plot(yvars=None, xvar='index', fname=None, data=None, title=None, label
         if xvar == 'index':
             xvar = np.arange(len(yvars[0]))
 
-    (fig,ax) = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=figsize)
     if data is not None:
         data[yvars].plot(ax=ax, legend=legend)
     else:
@@ -56,20 +44,13 @@ def save_plot(yvars=None, xvar='index', fname=None, data=None, title=None, label
     if ylabel: ax.set_ylabel(ylabel)
     if tight: plt.axis('tight')
     if legend: ax.legend(legend, loc='best')
-    if facecolor: fig.set_facecolor(facecolor)
-    if despine: sns.despine(ax=ax)
 
-    if fname is None:
-        fig.show()
-    else:
-        save_fig(fig, fname)
-        plt.close(fig)
+    return fig
 
 def scatter_label(xvar, yvar, data, ax=None, title=None, labels=True, xlabel=None, ylabel=None, xlim=None, ylim=None, figsize=(8,6)):
     df = data[[xvar, yvar]].dropna()
 
-    if ax is None:
-        (_, ax) = plt.subplots(figsize=figsize)
+    if ax is None: _, ax = plt.subplots(figsize=figsize)
     df.plot.scatter(x=xvar, y=yvar, s=0, ax=ax)
 
     if xlim: ax.set_xlim(xlim)
@@ -78,10 +59,10 @@ def scatter_label(xvar, yvar, data, ax=None, title=None, labels=True, xlabel=Non
     if xlabel: ax.set_xlabel(xlabel)
     if ylabel: ax.set_ylabel(ylabel)
 
-    labvals = df.index if labels in ['index',True] else df[labels]
+    labvals = df.index if labels in ('index', True) else df[labels]
     for txt in labvals.values:
-        (ymin, ymax) = ax.get_ylim()
-        (xmin, xmax) = ax.get_xlim()
+        ymin, ymax = ax.get_ylim()
+        xmin, xmax = ax.get_xlim()
         ax.annotate(txt, (df[xvar].ix[txt]-0.02*(xmax-xmin), df[yvar].ix[txt]-0.02*(ymax-ymin)))
 
     return ax
@@ -121,8 +102,7 @@ class Diagram():
             y *= yran
         return self.ax.annotate(text, xy=(x, y), **kwargs)
 
-    def show(self, despine=False):
-        sns.despine(fig=self.fig)
+    def show(self):
         self.fig.show()
 
     def save(self, fname):
