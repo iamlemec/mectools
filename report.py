@@ -162,7 +162,8 @@ def regtab_latex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', nu
     # handle row name and order
     if labels is not None:
         lorder = list(labels.values())
-        info = info.loc[list(labels)]
+        llist = [x for x in labels if x in info.index]
+        info = info.loc[llist]
         if type(labels) is dict:
             info = info.rename(labels, axis=0)
     else:

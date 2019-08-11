@@ -5,12 +5,11 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 # defaults
 figsize0 = 5, 4
 
-def save_plot(yvars=None, xvar='index', fname=None, data=None, title=None, labels=None, xlabel=None, ylabel=None, legend=True, xlim=None, ylim=None, figsize=figsize0, despine=True, tight=True, facecolor='white'):
+def save_plot(yvars=None, xvar='index', data=None, title=None, labels=None, xlabel=None, ylabel=None, legend=True, xlim=None, ylim=None, figsize=figsize0, tight=True):
     if yvars is None:
         yvars = list(data.columns)
     if type(yvars) is np.ndarray:
@@ -31,7 +30,7 @@ def save_plot(yvars=None, xvar='index', fname=None, data=None, title=None, label
         if xvar == 'index':
             xvar = np.arange(len(yvars[0]))
 
-    (fig,ax) = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=figsize)
     if data is not None:
         data[yvars].plot(ax=ax, legend=legend)
     else:
@@ -45,20 +44,12 @@ def save_plot(yvars=None, xvar='index', fname=None, data=None, title=None, label
     if ylabel: ax.set_ylabel(ylabel)
     if tight: plt.axis('tight')
     if legend: ax.legend(legend, loc='best')
-    if facecolor: fig.set_facecolor(facecolor)
-    if despine: sns.despine(ax=ax)
 
-    if fname is None:
-        fig.show()
-    else:
-        save_fig(fig, fname)
-        plt.close(fig)
+    return fig
 
 def scatter_label(xvar, yvar, data, labels=True, offset=0.02, ax=None):
     df = data[[xvar, yvar]].dropna()
-
-    if ax is None:
-        _, ax = plt.subplots()
+    if ax is None: _, ax = plt.subplots(figsize=figsize)
     df.plot.scatter(x=xvar, y=yvar, s=0, ax=ax)
 
     ymin, ymax = ax.get_ylim()
@@ -67,8 +58,9 @@ def scatter_label(xvar, yvar, data, labels=True, offset=0.02, ax=None):
 
     labvals = df.index if labels in ('index', True) else df[labels]
     for txt in labvals.values:
-        point = df[xvar].ix[txt] - offset*xlim, df[yvar].ix[txt] - offset*ylim
-        ax.annotate(txt, point)
+        ymin, ymax = ax.get_ylim()
+        xmin, xmax = ax.get_xlim()
+        ax.annotate(txt, (df[xvar].ix[txt]-0.02*(xmax-xmin), df[yvar].ix[txt]-0.02*(ymax-ymin)))
 
     return ax
 
@@ -107,8 +99,7 @@ class Diagram():
             y *= yran
         return self.ax.annotate(text, xy=(x, y), **kwargs)
 
-    def show(self, despine=False):
-        sns.despine(fig=self.fig)
+    def show(self):
         self.fig.show()
 
     def save(self, fname):
