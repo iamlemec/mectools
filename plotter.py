@@ -1,9 +1,12 @@
+import numpy as np
+import pandas as pd
+import altair as alt
+import matplotlib as mpl
+import matplotlib.style
+from statsmodels.nonparametric.kde import kdensity
+
 # patcher loader for matplotlib
 def plotter(pyplot=True, backend='GTK3Agg', theme=['clean'], rc={}):
-    import matplotlib as mpl
-    import matplotlib.style
-    import pandas as pd
-
     mpl.use(backend)
     mpl.style.use(theme)
     mpl.rcParams.update(rc)
@@ -44,9 +47,34 @@ def altair_config(size=14, width=400, height=300, glob=True):
             }
         }
     }
-    import altair as alt
     if glob:
+        import altair as alt
+        import pdvega
         alt.themes.register('mec', lambda: theme)
         alt.themes.enable('mec')
+        return alt
     else:
         return theme
+
+def altair_hist(data, log=False, q=0.01, bins=10):
+    data = data.dropna()
+    bin_lo, bin_hi = data.quantile([q, 1-q])
+    if type(bins) is int:
+        if log:
+            bins = np.exp(np.linspace(np.log(bin_lo), np.log(bin_hi), bins+1))
+        else:
+            bins = np.linspace(bin_lo, bin_hi, bins+1)
+    mids = 0.5*(bins[:-1]+bins[1:])
+    count, _ = np.histogram(data, bins=bins)
+    hist = pd.DataFrame({'bin': mids, 'count': count})
+    hist['dense'] = hist['count']/len(data)
+    ch = alt.Chart(hist).mark_bar(size=20).encode(x='bin', y='dense')
+    return ch
+
+def altair_kde(data, q=0.01, bins=100):
+    data = data.dropna()
+    clip = data.quantile([q, 1-q]).values
+    kde, bins, bw = kdensity(data, clip=clip, gridsize=bins)
+    hist = pd.DataFrame({'bin': bins, 'kde': kde})
+    ch = alt.Chart(hist).mark_line().encode(x='bin', y='kde')
+    return ch
