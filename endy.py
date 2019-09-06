@@ -164,6 +164,21 @@ def goldsec_vec(fun, xmin, xmax, tol=1e-12):
 
     return (b+a)/2
 
+# for an increasing function
+def secant_vec(fun, xmin, xmax, max_iter=64, sc_tol=1e-12, output=False):
+    x0 = xmin.copy()
+    x1 = xmax.copy()
+    f0 = fun(x0)
+    f1 = fun(x1)
+    for i in range(max_iter):
+        x0[:] = x1 - f1*((x1-x0)/(f1-f0))
+        f0[:] = fun(x0)
+        x0, x1 = x1, x0
+        f0, f1 = f1, f0
+        if np.max(np.abs(f1)) < sc_tol:
+            break
+    return x1
+
 # stack with flat support
 def vstack(v):
     if len(v) == 0:
@@ -184,8 +199,8 @@ def deriv(y, x, axis=0, direc='both', pad=True):
     # expand x if it is flat
     if y.ndim > x.ndim:
         x = expand(x, dims=y.ndim-x.ndim)
+        # perform differencing
 
-    # perform differencing
     if direc == 'both':
         der = (y[2:,...]-y[:-2,...])/(x[2:,...]-x[:-2,...])
     elif direc in ('left', 'right'):
@@ -205,3 +220,36 @@ def deriv(y, x, axis=0, direc='both', pad=True):
         der = der.swapaxes(0, axis)
 
     return der
+
+# generate continuous rv by linearly interpolating using cmf approximations
+def random_vec(probs, nf, state=np.random):
+    nbins, = probs.shape
+    assert((np.log2(nbins)%1.0)==0.0) # only powers of two
+
+    x = state.rand(nf)
+    bstep = nbins >> 1
+    bpos = np.zeros(nf, dtype=np.int)
+    while bstep > 0:
+        bcmp = bpos + bstep - 1
+        bsel = x > probs[bcmp]
+        bpos[bsel] += bstep
+        bstep >>= 1
+
+    return bpos
+
+# generate continuous rv by linearly interpolating using cmf approximations (columns of probs)
+def random_mat(probs, types, state=np.random):
+    ntypes, nbins = probs.shape
+    nf, = types.shape
+    assert((np.log2(nbins)%1.0)==0.0) # only powers of two
+
+    x = state.rand(nf)
+    bstep = nbins >> 1
+    bpos = np.zeros(nf, dtype=np.int)
+    while bstep > 0:
+        bcmp = bpos + bstep - 1
+        bsel = x > probs[types, bcmp]
+        bpos[bsel] += bstep
+        bstep >>= 1
+
+    return bpos
