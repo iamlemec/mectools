@@ -4,6 +4,7 @@ import os
 import sys
 import numpy as np
 from time import sleep
+from collections import OrderedDict
 from multiprocessing import Pool, Process, Queue, Pipe
 
 ##
@@ -104,7 +105,7 @@ def startup(f, N):
 # anneal entry point
 def anneal_parallel(f, x0, N=5, tick=0.1, **kwargs):
     # handle dicts
-    x_dict = type(x0) is dict
+    x_dict = type(x0) in (dict, OrderedDict)
     if x_dict:
         names = list(x0)
         x1 = np.array([x0[n] for n in names])
