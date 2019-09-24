@@ -107,13 +107,16 @@ def anneal_parallel(f, x0, N=5, tick=0.1, **kwargs):
     x_dict = type(x0) is dict
     if x_dict:
         names = list(x0)
-        x0 = np.array([x0[n] for n in names])
-        f = lambda x: f({n: z for n, z in zip(names, x)})
+        x1 = np.array([x0[n] for n in names])
+        f1 = lambda x: f({n: z for n, z in zip(names, x)})
+    else:
+        x1 = x0
+        f1 = f
 
     # initialize state
-    y0 = f(x0)
-    track = Tracker(x0, y0, **kwargs)
-    procs = list(startup(f, N))
+    y1 = f1(x1)
+    track = Tracker(x1, y1, **kwargs)
+    procs = list(startup(f1, N))
 
     # initialize workers
     for p, qp, qc in procs:
