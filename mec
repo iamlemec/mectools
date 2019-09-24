@@ -60,13 +60,17 @@ def do_start(unit):
     info = specs[unit]
     if is_running(unit):
         print(f'{unit}: already running')
-    else:
-        print(f'{unit}: starting')
-        shell = info.get('shell', True)
-        cmd = cmd_shell if shell else cmd_start
-        os.chdir(info['dir'])
-        os.system(cmd.format(unit=unit, cmd=info['cmd']))
-        os.chdir(base_dir)
+        return
+    pwd = info['dir']
+    if not os.path.isdir(pwd):
+        print(f'{unit}: working directory ({pwd}) does not exist')
+        return
+    print(f'{unit}: starting')
+    shell = info.get('shell', True)
+    cmd = cmd_shell if shell else cmd_start
+    os.chdir(pwd)
+    os.system(cmd.format(unit=unit, cmd=info['cmd']))
+    os.chdir(base_dir)
 
 def do_kill(unit):
     if not is_running(unit):

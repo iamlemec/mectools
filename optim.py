@@ -103,6 +103,13 @@ def startup(f, N):
 
 # anneal entry point
 def anneal_parallel(f, x0, N=5, tick=0.1, **kwargs):
+    # handle dicts
+    x_dict = type(x0) is dict
+    if x_dict:
+        names = list(x0)
+        x0 = np.array([x0[n] for n in names])
+        f = lambda x: f({n: z for n, z in zip(names, x)})
+
     # initialize state
     y0 = f(x0)
     track = Tracker(x0, y0, **kwargs)
@@ -127,5 +134,10 @@ def anneal_parallel(f, x0, N=5, tick=0.1, **kwargs):
             break
         sleep(tick)
 
+    if x_dict:
+        best_x = {n: z for n, z in zip(names, track.best_x)}
+    else:
+        best_x = track.best_x
+
     # return final results
-    return track.best_x, track.best_y
+    return best_x, track.best_y
