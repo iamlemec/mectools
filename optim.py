@@ -61,7 +61,7 @@ class Tracker():
 
     def output(self, x, y, i=0):
         xstr = ','.join(['{:8.5f}']*self.nx).format(*x)
-        print(f'{i} -> [{xstr}]: {y:15.5f} <= {self.best_y:15.5f} ({self.tries})')
+        print(f'{i} -> [{xstr}]: {y:15.5g} <= {self.best_y:15.5g} ({self.tries})')
 
     def random(self):
         return self.best_x + self.scale*np.random.randn(self.nx)

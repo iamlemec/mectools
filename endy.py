@@ -81,17 +81,24 @@ def expand(x, dims=1, axis=-1):
     shape = x.shape[:axis] + dims + x.shape[axis:]
     return x.reshape(shape)
 
+def sliceaxis(x, axis, i):
+    ndim = x.ndim
+    imax = x.shape[axis]
+    if i < 0: i += imax
+    acc = axis*(slice(None),) + (slice(i, i+1),) + (ndim-axis-1)*(slice(None),)
+    return x[acc]
+
 # project non-flat ranges on bins
 # bins: grid spec (N+1)
 # xlo, xhi: bin lows and his (M)
 # returns: (NxM)
-def project(bins, xp=None, xlo=None, xhi=None, axis=-1):
+def project(bins, xp=None, axis=None, xlo=None, xhi=None):
     # if point given, assume additively scaled ranges around each bin
     if xp is not None:
-        nd = len(xp.shape)
-        db = np.diff(bins)
-        dbx = expand(expand(db, nd-axis-1, -1), axis, 0)
-        xlo, xhi = xp - dbx/2, xp + dbx/2
+        ndim = len(xp.shape)
+        dbin = np.diff(xp, axis=axis)
+        dbinx = np.concat([dbin, sliceaxis(dbin, axis, -1)], axis=axis) # repeat last axis row
+        xlo, xhi = xp - dbinx/2, xp + dbinx/2
 
     # general code for xlo, xhi
     blo, bhi = expand(bins[:-1], xlo.ndim, 0), expand(bins[1:], xhi.ndim, 0)
