@@ -46,7 +46,7 @@ def anneal(f, x0, scale=0.15, decr=0.5, tol=1e-3, wait=50, maxiter=sys.maxsize):
 
 # parameters tracker
 class Tracker():
-    def __init__(self, x, y=-np.inf, scale=0.15, decr=0.5, tol=1e-3, wait=50, maxiter=sys.maxsize):
+    def __init__(self, x, y=np.inf, scale=0.15, decr=0.5, tol=1e-3, wait=50, maxiter=sys.maxsize):
         self.nx = len(x)
         self.scale = scale
         self.decr = decr
