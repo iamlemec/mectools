@@ -3,6 +3,7 @@ import re
 import numpy as np
 import pandas as pd
 import statsmodels as sm
+from collections import OrderedDict
 
 ##
 ## generic tables
@@ -145,9 +146,9 @@ def regtab_latex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', nu
     # see if it's a dict of regression results and if so turn it into a table
     # with (reg, stat) columns and (exog_name) rows. otherwise, should aleady
     # be one of these.
-    if type(info) is dict:
-        stats = pd.concat({col: reg_stats(res, stats) for col, res in info.items()}, axis=1)
-        info = pd.concat({col: reg_dict(res) for col, res in info.items()}, axis=1)
+    if type(info) in (dict, OrderedDict):
+        stats = pd.concat([reg_stats(res, stats) for res in info.values()], keys=list(info), axis=1)
+        info = pd.concat([reg_dict(res) for res in info.values()], keys=list(info), axis=1)
 
     # handle column name and order
     if columns is not None:

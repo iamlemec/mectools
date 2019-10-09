@@ -65,6 +65,8 @@ def do_start(unit):
     if not os.path.isdir(pwd):
         print(f'{unit}: working directory ({pwd}) does not exist')
         return
+    if 'env' in info:
+        os.environ.update(info['env'])
     print(f'{unit}: starting')
     shell = info.get('shell', True)
     cmd = cmd_shell if shell else cmd_start

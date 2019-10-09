@@ -49,7 +49,8 @@ def altair_config(size=14, width=400, height=300, glob=True):
     }
     if glob:
         import altair as alt
-        import pdvega
+        # import pdvega
+        pd.set_option('plotting.backend', 'altair')
         alt.themes.register('mec', lambda: theme)
         alt.themes.enable('mec')
         return alt
