@@ -46,9 +46,10 @@ def anneal(f, x0, scale=0.15, decr=0.5, tol=1e-3, wait=50, maxiter=sys.maxsize):
 
 # parameters tracker
 class Tracker():
-    def __init__(self, x, y=np.inf, scale=0.15, decr=0.5, tol=1e-3, wait=50, maxiter=sys.maxsize):
+    def __init__(self, x, y=np.inf, scale=0.15, rand='add', decr=0.5, tol=1e-3, wait=50, maxiter=sys.maxsize):
         self.nx = len(x)
         self.scale = scale
+        self.rand = rand
         self.decr = decr
         self.tol = tol
         self.wait = wait
@@ -64,7 +65,11 @@ class Tracker():
         print(f'{i} -> [{xstr}]: {y:15.5g} <= {self.best_y:15.5g} ({self.tries})')
 
     def random(self):
-        return self.best_x + self.scale*np.random.randn(self.nx)
+        diff = self.scale*np.random.randn(self.nx)
+        if self.rand == 'add':
+            return self.best_x + diff
+        elif self.rand == 'mul':
+            return self.best_x*np.exp(diff)
 
     def update(self, x, y, i=0):
         self.tries += 1
