@@ -23,10 +23,13 @@ def vstack(v, N=1):
         return np.vstack(v)
 
 def strides(v):
-    return np.r_[1, np.cumprod(v[1:])][::-1]
+    if len(v) == 1:
+        return np.array([1])
+    else:
+        return np.r_[1, np.cumprod(v[1:])][::-1]
 
-def prefix(p, v, sep='='):
-    return [f'{p}{sep}{z}' for z in v]
+def prefix(p, v):
+    return [f'{p}{z}' for z in v]
 
 def chainer(v):
     return list(chain.from_iterable(v))
@@ -36,7 +39,7 @@ def chainer(v):
 # terms becomes power sums of features -> then one hot again
 
 # high dimensional fixed effects - expects strings or expressions
-def sparse_ols(y, x=[], fe=[], data=None, intercept=True, drop='first'):
+def sparse_ols_simple(y, x=[], fe=[], data=None, intercept=True, drop='first'):
     # generate dense input variables
     y_vec = frame_eval(y, data)
     N = len(y_vec)
@@ -69,7 +72,7 @@ def sparse_ols(y, x=[], fe=[], data=None, intercept=True, drop='first'):
 
 # high dimensional fixed effects - expects strings or expressions
 # can have tuples of strings in fixed effects
-def sparse_ols_new(y, x=[], fe=[], data=None, intercept=True, drop='first'):
+def sparse_ols_cross(y, x=[], fe=[], data=None, intercept=True, drop='first'):
     # generate output variables
     y_vec = frame_eval(y, data)
     N = len(y_vec)
@@ -85,13 +88,13 @@ def sparse_ols_new(y, x=[], fe=[], data=None, intercept=True, drop='first'):
     feat = chainer(fe)
     feat_mat = vstack([frame_eval(z, data) for z in feat], N).T
     term_tag = [':'.join(term) for term in fe]
-    term_map = [np.array([feat.index(z) for z in term]) for term in fe]
+    term_map = [[feat.index(z) for z in term] for term in fe]
 
     # ordinally encode fixed effects
     enc_ord = OrdinalEncoder(categories='auto')
-    feat_ord = enc_ord.fit_transform(feat_mat)
+    feat_ord = enc_ord.fit_transform(feat_mat).astype(np.int)
     feat_name = [z.astype(str) for z in enc_ord.categories_]
-    feat_size = np.array([len(z) for z in enc_ord.categories_])
+    feat_size = [len(z) for z in enc_ord.categories_]
 
     if len(fe) == 0:
         final_spmat = sp.coo_matrix((N, 0))
@@ -101,9 +104,9 @@ def sparse_ols_new(y, x=[], fe=[], data=None, intercept=True, drop='first'):
         form_name = []
         for term_idx in term_map:
             # generate cross ordinals
-            term_size = feat_size[term_idx]
+            term_size = [feat_size[i] for i in term_idx]
             term_stride = strides(term_size)
-            cross_val = feat_mat[:,term_idx].dot(term_stride)
+            cross_val = feat_ord[:,term_idx].dot(term_stride)
             form_val.append(cross_val)
 
             # generate cross names
@@ -115,9 +118,13 @@ def sparse_ols_new(y, x=[], fe=[], data=None, intercept=True, drop='first'):
         hot = OneHotEncoder(categories='auto', drop=drop)
         final_mat = vstack(form_val).T
         final_spmat = hot.fit_transform(final_mat)
-        seen_cats = [c[1:] for c in hot.categories_] # only for drop=first
+        if hot.drop_idx_ is None:
+            seen_cats = hot.categories_
+        else:
+            seen_cats = [np.delete(c, i) for c, i in zip(hot.categories_, hot.drop_idx_)]
         seen_name = [n[c] for c, n in zip(seen_cats, form_name)]
-        final_name = chainer(prefix(t, n) for t, n in zip(term_tag, seen_name))
+        final_name = chainer(prefix(f'{t}=', n) for t, n in zip(term_tag, seen_name))
+
 
     # compute coefficients
     x_spmat = sp.hstack([x_mat, final_spmat])
@@ -126,12 +133,6 @@ def sparse_ols_new(y, x=[], fe=[], data=None, intercept=True, drop='first'):
     # match names
     name = x + final_name
     ret = pd.Series(dict(zip(name, beta)))
-
-    print(final_spmat.shape[1])
-    print(len(final_name))
-
-    print(len(beta))
-    print(len(name))
 
     return ret
 
