@@ -6,7 +6,7 @@ import matplotlib.style
 from statsmodels.nonparametric.kde import kdensity
 
 # patcher loader for matplotlib
-def plotter(pyplot=True, backend='GTK3Agg', theme=['clean'], rc={}):
+def plotter(pyplot=True, backend='TkAgg', theme=['clean'], rc={}):
     mpl.use(backend)
     mpl.style.use(theme)
     mpl.rcParams.update(rc)
@@ -49,8 +49,8 @@ def altair_config(size=14, width=400, height=300, glob=True):
     }
     if glob:
         import altair as alt
-        # import pdvega
-        pd.set_option('plotting.backend', 'altair')
+        import pdvega
+        # pd.set_option('plotting.backend', 'altair')
         alt.themes.register('mec', lambda: theme)
         alt.themes.enable('mec')
         return alt

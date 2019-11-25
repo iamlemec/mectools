@@ -94,6 +94,31 @@ def gini(x):
     return 1 + 1/N - 2*B
 
 ##
+## merging tools
+##
+
+def lag_merge(data, tvar, id_vars=[], suffix='_prev', how='left', offset=-1):
+    if type(id_vars) is str:
+        id_vars = [id_vars]
+
+    index_names = data.index.names
+    if tvar in index_names:
+        reset = True
+        data = data.reset_index()
+    else:
+        reset = False
+
+    tvar_prev = tvar + suffix
+    data[tvar_prev] = data[tvar] + offset
+    data = data.merge(data, left_on=id_vars+[tvar_prev], right_on=id_vars+[tvar], how=how, suffixes=('', suffix))
+    data = data.drop(columns=[tvar_prev, tvar_prev+suffix])
+
+    if reset:
+        data = data.set_index(index_names)
+
+    return data
+
+##
 ## data frame tools
 ##
 
