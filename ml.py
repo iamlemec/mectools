@@ -3,10 +3,11 @@
 import numpy as np
 import scipy.sparse as sp
 import pandas as pd
-import tensorflow as tf
-import tensorflow.keras as K
-from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
+from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder
 from itertools import chain, product
+
+# import tensorflow as tf
+# import tensorflow.keras as K
 
 # evaluate in dataframe environemnt
 def frame_eval(exp, data, engine='pandas'):
@@ -15,7 +16,7 @@ def frame_eval(exp, data, engine='pandas'):
     elif engine == 'python':
         return eval(exp, globals(), data)
 
-def vstack2(v, N=1):
+def vstack(v, N=1):
     if len(v) == 0:
         return np.array([[]]).reshape((0, N))
     else:
@@ -24,7 +25,7 @@ def vstack2(v, N=1):
 def strides(v):
     return np.r_[1, np.cumprod(v[1:])][::-1]
 
-def add_prefix(p, v, sep='_'):
+def prefix(p, v, sep='='):
     return [f'{p}{sep}{z}' for z in v]
 
 def chainer(v):
@@ -39,8 +40,8 @@ def sparse_ols(y, x=[], fe=[], data=None, intercept=True, drop='first'):
     # generate dense input variables
     y_vec = frame_eval(y, data)
     N = len(y_vec)
-    x_mat = vstack2([frame_eval(z, data) for z in x], N).T
-    fe_mat = vstack2([frame_eval(z, data) for z in fe], N).T
+    x_mat = vstack([frame_eval(z, data) for z in x], N).T
+    fe_mat = vstack([frame_eval(z, data) for z in fe], N).T
 
     # add intercept if needed
     if intercept:
@@ -74,7 +75,7 @@ def sparse_ols_new(y, x=[], fe=[], data=None, intercept=True, drop='first'):
     N = len(y_vec)
 
     # generate input variables
-    x_mat = vstack2([frame_eval(z, data) for z in x], N).T
+    x_mat = vstack([frame_eval(z, data) for z in x], N).T
     if intercept:
         x_mat = np.hstack([np.ones((N, 1)), x_mat])
         x = ['intercept'] + x
@@ -82,51 +83,55 @@ def sparse_ols_new(y, x=[], fe=[], data=None, intercept=True, drop='first'):
     # generate map between terms and features
     fe = [[z] if type(z) is str else z for z in fe]
     feat = chainer(fe)
-    feat_mat = vstack2([frame_eval(z, data) for z in feat], N).T
-    term_tags = [':'.join(term) for term in fe]
+    feat_mat = vstack([frame_eval(z, data) for z in feat], N).T
+    term_tag = [':'.join(term) for term in fe]
     term_map = [np.array([feat.index(z) for z in term]) for term in fe]
 
     # ordinally encode fixed effects
     enc_ord = OrdinalEncoder(categories='auto')
     feat_ord = enc_ord.fit_transform(feat_mat)
-    feat_names = [z.astype(str) for z in enc_ord.categories_]
+    feat_name = [z.astype(str) for z in enc_ord.categories_]
     feat_size = np.array([len(z) for z in enc_ord.categories_])
 
-    # sparse one-hot fixed effects
     if len(fe) == 0:
         final_spmat = sp.coo_matrix((N, 0))
-        final_names = []
+        final_name = []
     else:
-        form_vals = []
-        form_names = []
+        form_val = []
+        form_name = []
         for term_idx in term_map:
             # generate cross ordinals
-            term_sizes = feat_size[term_idx]
-            term_stride = strides(term_sizes)
-            cross_vals = feat_mat[:,term_idx].dot(term_stride)
-            form_vals.append(cross_vals)
+            term_size = feat_size[term_idx]
+            term_stride = strides(term_size)
+            cross_val = feat_mat[:,term_idx].dot(term_stride)
+            form_val.append(cross_val)
 
             # generate cross names
-            term_names = [feat_names[i] for i in term_idx]
-            cross_names = [':'.join(x) for x in product(*term_names)]
-            form_names.append(cross_names)
+            term_name = [feat_name[i] for i in term_idx]
+            cross_name = np.array([':'.join(x) for x in product(*term_name)])
+            form_name.append(cross_name)
 
+        # one hot encode all (cross)-terms
         hot = OneHotEncoder(categories='auto', drop=drop)
-        final_mat = vstack2(form_vals).T
+        final_mat = vstack(form_val).T
         final_spmat = hot.fit_transform(final_mat)
-        final_names = chainer([f'{t}={z}' for z in n] for t, n in zip(term_tags, form_names))
-        print(final_spmat.shape)
+        seen_cats = [c[1:] for c in hot.categories_] # only for drop=first
+        seen_name = [n[c] for c, n in zip(seen_cats, form_name)]
+        final_name = chainer(prefix(t, n) for t, n in zip(term_tag, seen_name))
 
     # compute coefficients
     x_spmat = sp.hstack([x_mat, final_spmat])
     beta = sp.linalg.spsolve(x_spmat.T*x_spmat, x_spmat.T*y_vec)
 
-    print(len(beta))
-    print(len(final_names))
-
     # match names
-    names = x + final_names
-    ret = pd.Series(dict(zip(names, beta)))
+    name = x + final_name
+    ret = pd.Series(dict(zip(name, beta)))
+
+    print(final_spmat.shape[1])
+    print(len(final_name))
+
+    print(len(beta))
+    print(len(name))
 
     return ret
 
