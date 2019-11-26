@@ -29,8 +29,8 @@ def strides(v):
     else:
         return np.r_[1, np.cumprod(v[1:])][::-1]
 
-def prefix(p, v):
-    return [f'{p}{z}' for z in v]
+def swizzle(ks, vs):
+    return ','.join([f'{k}={v}' for k, v in zip(ks, vs)])
 
 def chainer(v):
     return list(chain.from_iterable(v))
@@ -43,10 +43,9 @@ def sparse_categorical(terms, data, N=None, drop='first'):
         return sp.coo_matrix((N, 0)), []
 
     # generate map between terms and features
-    terms = [[z] if type(z) is str else z for z in terms]
+    terms = [(z,) if type(z) is str else z for z in terms]
     feats = chainer(terms)
     feat_mat = design_matrix(feats, data, N=N)
-    term_tags = [':'.join(t) for t in terms]
     term_map = [[feats.index(z) for z in t] for t in terms]
 
     # ordinally encode fixed effects
@@ -67,7 +66,7 @@ def sparse_categorical(terms, data, N=None, drop='first'):
 
         # generate cross names
         term_names = [feat_names[i] for i in term_idx]
-        cross_names = [':'.join(x) for x in product(*term_names)]
+        cross_names = [x for x in product(*term_names)]
         form_names.append(cross_names)
 
     # one hot encode all (cross)-terms
@@ -81,7 +80,7 @@ def sparse_categorical(terms, data, N=None, drop='first'):
     else:
         seen_cats = [np.delete(c, i) for c, i in zip(hot.categories_, hot.drop_idx_)]
     seen_names = [[n[i] for i in c] for c, n in zip(seen_cats, form_names)]
-    final_names = chainer(prefix(f'{t}=', n) for t, n in zip(term_tags, seen_names))
+    final_names = chainer([swizzle(t, i) for i in n] for t, n in zip(terms, seen_names))
 
     return final_spmat, final_names
 
