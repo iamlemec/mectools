@@ -1,20 +1,24 @@
 # machine learning and stats stuff
 
 import numpy as np
-import scipy.sparse as sp
 import pandas as pd
+import scipy.sparse as sp
+import tensorflow as tf
+import tensorflow.keras as keras
+import tensorflow.keras.layers as layers
 from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder
-from itertools import chain, product
+from itertools import chain, product, cycle
 
-# import tensorflow as tf
-# import tensorflow.keras as K
+##
+## tools
+##
 
 # evaluate in dataframe environemnt
 def frame_eval(exp, data, engine='pandas'):
     if engine == 'pandas':
-        return data.eval(exp)
+        return data.eval(exp).values
     elif engine == 'python':
-        return eval(exp, globals(), data)
+        return eval(exp, globals(), data).values
 
 def vstack(v, N=None):
     if len(v) == 0:
@@ -35,8 +39,28 @@ def swizzle(ks, vs):
 def chainer(v):
     return list(chain.from_iterable(v))
 
+##
+## design matrices
+##
+
 def design_matrix(x, data, N=None):
     return vstack([frame_eval(z, data) for z in x], N).T
+
+def design_matrices(y, x=[], data=None, intercept=True):
+    # generate output variables
+    y_vec = frame_eval(y, data)
+    N = len(y_vec)
+
+    # find dense variable matrix
+    x_mat = design_matrix(x, data, N=N)
+
+    # optionally add intercept
+    x_names = x
+    if intercept:
+        x_mat = np.hstack([np.ones((N, 1)), x_mat])
+        x_names = ['intercept'] + x_names
+
+    return y_vec, x_mat, x_names
 
 def sparse_categorical(terms, data, N=None, drop='first'):
     if len(terms) == 0:
@@ -84,33 +108,84 @@ def sparse_categorical(terms, data, N=None, drop='first'):
 
     return final_spmat, final_names
 
+##
+## regressions
+##
+
+# regular ols
+def ols(y, x=[], data=None, intercept=True):
+    y_vec, x_mat, x_names = design_matrices(y, x, data, intercept=intercept)
+    betas = np.linalg.solve(np.dot(x_mat.T, x_mat), np.dot(x_mat.T, y_vec))
+    ret = pd.Series(dict(zip(x_names, betas)))
+    return ret
+
 ## high dimensional fixed effects
 # x expects strings or expressions
 # fe can have strings or tuples of strings
 def sparse_ols(y, x=[], fe=[], data=None, intercept=True, drop='first'):
-    # generate output variables
-    y_vec = frame_eval(y, data)
+    # construct dense matrices
+    y_vec, x_mat, x_names = design_matrices(y, x, data, intercept=intercept)
     N = len(y_vec)
 
-    # find dense variable matrix
-    x_mat = design_matrix(x, data, N=N)
-
-    # find sparse categorical matrix
+    # construct sparse categorical matrix
     fe_spmat, fe_names = sparse_categorical(fe, data, N=N, drop=drop)
-
-    # optionally add intercept
-    if intercept:
-        x_mat = np.hstack([np.ones((N, 1)), x_mat])
-        x = ['intercept'] + x
 
     # compute coefficients
     x_spmat = sp.hstack([x_mat, fe_spmat])
     betas = sp.linalg.spsolve(x_spmat.T*x_spmat, x_spmat.T*y_vec)
 
     # match names
-    names = x + fe_names
+    names = x_names + fe_names
     ret = pd.Series(dict(zip(names, betas)))
 
     return ret
 
+class SparseDataset(keras.utils.Sequence):
+    def __init__(self, y_vec, x_mat, batch_size):
+        self.x_mat = x_mat
+        self.y_vec = y_vec
+        self.batch_size = batch_size
+        self.num_batch = int(np.floor(len(y_vec)/float(batch_size)))
+
+    def __len__(self):
+        return self.num_batch
+
+    def __getitem__(self, idx):
+        base = idx*self.batch_size
+        top = base + self.batch_size
+
+        x_bat = self.x_mat[base:top,:].todense()
+        y_bat = self.y_vec[base:top]
+
+        return x_bat, y_bat
+
 # poisson regression
+def poisson(y, x=[], fe=[], data=None, intercept=True, drop='first',
+            batch_size=4092, epochs=3, learning_rate=0.5):
+    # construct design matrices
+    y_vec, x_mat, x_names = design_matrices(y, x, data, intercept=intercept)
+    N = len(y_vec)
+
+    # construct sparse categorical matrix
+    fe_spmat, fe_names = sparse_categorical(fe, data, N=N, drop=drop)
+    x_spmat = sp.hstack([x_mat, fe_spmat], format='csr')
+    _, K = x_spmat.shape
+
+    # construct network
+    inputs = layers.Input((K,), name='x')
+    lpred = layers.Dense(1, use_bias=False)(inputs)
+    pred = keras.layers.Lambda(tf.exp)(lpred)
+    model = keras.Model(inputs=inputs, outputs=pred)
+
+    # run estimation
+    optim = keras.optimizers.Adagrad(learning_rate=learning_rate)
+    model.compile(loss='poisson', optimizer=optim, metrics=['accuracy'])
+    dataset = SparseDataset(y_vec, x_spmat, batch_size)
+    model.fit_generator(dataset, epochs=epochs)
+
+    # extract coefficients
+    names = x_names + fe_names
+    betas = model.weights[0].numpy().flatten()
+    ret = pd.Series(dict(zip(names, betas)))
+
+    return ret
