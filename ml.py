@@ -7,13 +7,12 @@ import tensorflow as tf
 import tensorflow.keras as keras
 import tensorflow.keras.layers as layers
 from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder
-from itertools import chain, product, cycle
+from itertools import chain, product
 
 ##
 ## tools
 ##
 
-# evaluate in dataframe environemnt
 def frame_eval(exp, data, engine='pandas'):
     if engine == 'pandas':
         return data.eval(exp).values
@@ -26,7 +25,7 @@ def vstack(v, N=None):
     else:
         return np.vstack(v)
 
-# this assumes row major to align wiht product
+# this assumes row major to align with product
 def strides(v):
     if len(v) == 1:
         return np.array([1])
@@ -43,33 +42,17 @@ def chainer(v):
 ## design matrices
 ##
 
-def design_matrix(x, data, N=None):
+def frame_matrix(x, data, N=None):
     return vstack([frame_eval(z, data) for z in x], N).T
-
-def design_matrices(y, x=[], data=None, intercept=True):
-    # generate output variables
-    y_vec = frame_eval(y, data)
-    N = len(y_vec)
-
-    # find dense variable matrix
-    x_mat = design_matrix(x, data, N=N)
-
-    # optionally add intercept
-    x_names = x
-    if intercept:
-        x_mat = np.hstack([np.ones((N, 1)), x_mat])
-        x_names = ['intercept'] + x_names
-
-    return y_vec, x_mat, x_names
 
 def sparse_categorical(terms, data, N=None, drop='first'):
     if len(terms) == 0:
-        return sp.coo_matrix((N, 0)), []
+        return sp.csr_matrix((N, 0)), []
 
     # generate map between terms and features
     terms = [(z,) if type(z) is str else z for z in terms]
     feats = chainer(terms)
-    feat_mat = design_matrix(feats, data, N=N)
+    feat_mat = frame_matrix(feats, data, N=N)
     term_map = [[feats.index(z) for z in t] for t in terms]
 
     # ordinally encode fixed effects
@@ -108,38 +91,71 @@ def sparse_categorical(terms, data, N=None, drop='first'):
 
     return final_spmat, final_names
 
+def design_matrix(x=[], fe=[], data=None, intercept=True, drop='first', N=None):
+    # construct individual matrices
+    if len(x) > 0:
+        x_mat, x_names = frame_matrix(x, data, N=N), x.copy()
+    else:
+        x_mat, x_names = None, []
+    if len(fe) > 0:
+        fe_mat, fe_names = sparse_categorical(fe, data, drop=drop, N=N)
+    else:
+        fe_mat, fe_names = None, []
+
+    # try to infer N
+    if N is None:
+        if x_mat is not None:
+            N, _ = x_mat.shape
+        elif fe_mat is not None:
+            N, _ = fe_mat.shape
+
+    # we should know N by now
+    if N is None:
+        raise(Exception('Must specify N if no data'))
+
+    # optionally add intercept
+    if intercept:
+        inter = np.ones((N, 1))
+        x_mat = np.hstack([inter, x_mat]) if x_mat is not None else inter
+        x_names = ['intercept'] + x_names
+
+    # handle various cases
+    names = x_names + fe_names
+    if x_mat is not None and fe_mat is not None:
+        mat = sp.hstack([x_mat, fe_mat], format='csr')
+    elif x_mat is not None and fe_mat is None:
+        mat = x_mat
+    elif x_mat is None and fe_spmat is not None:
+        mat = fe_mat
+    else:
+        mat = np.empty((N, 0))
+
+    # return everything
+    return mat, names
+
+def design_matrices(y, x=[], fe=[], data=None, intercept=True, drop='first'):
+    y_vec = frame_eval(y, data)
+    N = len(y_vec)
+    x_mat, x_names = design_matrix(x, fe, data, N=N, intercept=intercept, drop=drop)
+    return y_vec, x_mat, x_names
+
 ##
 ## regressions
 ##
 
-# regular ols
-def ols(y, x=[], data=None, intercept=True):
-    y_vec, x_mat, x_names = design_matrices(y, x, data, intercept=intercept)
-    betas = np.linalg.solve(np.dot(x_mat.T, x_mat), np.dot(x_mat.T, y_vec))
-    ret = pd.Series(dict(zip(x_names, betas)))
-    return ret
-
 ## high dimensional fixed effects
 # x expects strings or expressions
 # fe can have strings or tuples of strings
-def sparse_ols(y, x=[], fe=[], data=None, intercept=True, drop='first'):
-    # construct dense matrices
-    y_vec, x_mat, x_names = design_matrices(y, x, data, intercept=intercept)
-    N = len(y_vec)
-
-    # construct sparse categorical matrix
-    fe_spmat, fe_names = sparse_categorical(fe, data, N=N, drop=drop)
-
-    # compute coefficients
-    x_spmat = sp.hstack([x_mat, fe_spmat])
-    betas = sp.linalg.spsolve(x_spmat.T*x_spmat, x_spmat.T*y_vec)
-
-    # match names
-    names = x_names + fe_names
-    ret = pd.Series(dict(zip(names, betas)))
-
+def ols(y, x=[], fe=[], data=None, intercept=True, drop='first'):
+    y_vec, x_mat, x_names = design_matrices(y, x, fe, data, intercept=intercept, drop=drop)
+    if sp.issparse(x_mat):
+        betas = sp.linalg.spsolve(x_mat.T*x_mat, x_mat.T*y_vec)
+    else:
+        betas = np.linalg.solve(np.dot(x_mat.T, x_mat), np.dot(x_mat.T, y_vec))
+    ret = pd.Series(dict(zip(x_names, betas)))
     return ret
 
+# feed in sparse matrix in dense batches
 class SparseDataset(keras.utils.Sequence):
     def __init__(self, y_vec, x_mat, batch_size):
         self.x_mat = x_mat
@@ -159,17 +175,12 @@ class SparseDataset(keras.utils.Sequence):
 
         return x_bat, y_bat
 
-# poisson regression
+# poisson regression using keras
 def poisson(y, x=[], fe=[], data=None, intercept=True, drop='first',
             batch_size=4092, epochs=3, learning_rate=0.5):
     # construct design matrices
-    y_vec, x_mat, x_names = design_matrices(y, x, data, intercept=intercept)
-    N = len(y_vec)
-
-    # construct sparse categorical matrix
-    fe_spmat, fe_names = sparse_categorical(fe, data, N=N, drop=drop)
-    x_spmat = sp.hstack([x_mat, fe_spmat], format='csr')
-    _, K = x_spmat.shape
+    y_vec, x_mat, names = design_matrices(y, x, fe, data, intercept=intercept, drop=drop)
+    _, K = x_mat.shape
 
     # construct network
     inputs = layers.Input((K,), name='x')
@@ -180,12 +191,13 @@ def poisson(y, x=[], fe=[], data=None, intercept=True, drop='first',
     # run estimation
     optim = keras.optimizers.Adagrad(learning_rate=learning_rate)
     model.compile(loss='poisson', optimizer=optim, metrics=['accuracy'])
-    dataset = SparseDataset(y_vec, x_spmat, batch_size)
-    model.fit_generator(dataset, epochs=epochs)
+    if sp.issparse(x_mat):
+        dataset = SparseDataset(y_vec, x_mat, batch_size)
+        model.fit_generator(dataset, epochs=epochs)
+    else:
+        model.fit(x_mat, y_vec, epochs=epochs, batch_size=batch_size)
 
     # extract coefficients
-    names = x_names + fe_names
     betas = model.weights[0].numpy().flatten()
     ret = pd.Series(dict(zip(names, betas)))
-
     return ret
