@@ -176,21 +176,27 @@ class SparseDataset(keras.utils.Sequence):
         return x_bat, y_bat
 
 # poisson regression using keras
-def poisson(y, x=[], fe=[], data=None, intercept=True, drop='first',
-            batch_size=4092, epochs=3, learning_rate=0.5):
+def glm(y, x=[], fe=[], data=None, intercept=True, drop='first',
+        link='identity', loss='mse', metrics=['accuracy'],
+        batch_size=4092, epochs=3, learning_rate=0.5):
+    # find link function
+    if type(link) is str:
+        link = getattr(tf, link)
+
     # construct design matrices
     y_vec, x_mat, names = design_matrices(y, x, fe, data, intercept=intercept, drop=drop)
     _, K = x_mat.shape
 
     # construct network
-    inputs = layers.Input((K,), name='x')
-    lpred = layers.Dense(1, use_bias=False)(inputs)
-    pred = keras.layers.Lambda(tf.exp)(lpred)
+    inputs = layers.Input((K,))
+    pred = layers.Dense(1, use_bias=False)(inputs)
+    if link is not None:
+        pred = keras.layers.Lambda(link)(pred)
     model = keras.Model(inputs=inputs, outputs=pred)
 
     # run estimation
     optim = keras.optimizers.Adagrad(learning_rate=learning_rate)
-    model.compile(loss='poisson', optimizer=optim, metrics=['accuracy'])
+    model.compile(loss=loss, optimizer=optim, metrics=metrics)
     if sp.issparse(x_mat):
         dataset = SparseDataset(y_vec, x_mat, batch_size)
         model.fit_generator(dataset, epochs=epochs)
@@ -201,3 +207,9 @@ def poisson(y, x=[], fe=[], data=None, intercept=True, drop='first',
     betas = model.weights[0].numpy().flatten()
     ret = pd.Series(dict(zip(names, betas)))
     return ret
+
+# standard poisson regression
+def poisson(y, x=[], fe=[], data=None, **kwargs):
+    return glm(y, x=x, fe=fe, data=data, link='exp', loss='poisson', **kwargs)
+
+# try negative binomial next (custom loss)
