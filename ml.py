@@ -6,6 +6,7 @@ import scipy.sparse as sp
 import tensorflow as tf
 import tensorflow.keras as keras
 import tensorflow.keras.layers as layers
+import tensorflow.keras.backend as K
 from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder
 from itertools import chain, product
 
@@ -37,6 +38,47 @@ def swizzle(ks, vs):
 
 def chainer(v):
     return list(chain.from_iterable(v))
+
+def negate(f):
+    return lambda *x, **kwargs: -f(*x, **kwargs)
+
+##
+## tensorflow tools
+##
+
+# make a sparse tensor
+def sparse_tensor(inp, dtype=np.float32):
+    mat = inp.tocoo().astype(dtype)
+    idx = list(zip(mat.row, mat.col))
+    ten = tf.SparseTensor(idx, mat.data, mat.shape)
+    return tf.sparse.reorder(ten)
+
+# dense layer taking sparse matrix as input
+class SparseLayer(layers.Layer):
+    def __init__(self, vocabulary_size, num_units, activation=None, use_bias=True, **kwargs):
+        super().__init__()
+        self.vocabulary_size = vocabulary_size
+        self.num_units = num_units
+        self.activation = tf.keras.activations.get(activation)
+        self.use_bias = use_bias
+
+    def build(self, input_shape):
+        self.kernel = self.add_weight(
+            "kernel", shape=[self.vocabulary_size, self.num_units]
+        )
+        if self.use_bias:
+            self.bias = self.add_weight("bias", shape=[self.num_units])
+
+    def call(self, inputs, **kwargs):
+        is_sparse = isinstance(inputs, tf.SparseTensor)
+        matmul = tf.sparse.sparse_dense_matmul if is_sparse else tf.matmul
+        inters = matmul(inputs, self.kernel)
+        outputs = tf.add(inters, self.bias) if self.use_bias else inters
+        return self.activation(outputs)
+
+    def compute_output_shape(self, input_shape):
+        input_shape = input_shape.get_shape().as_list()
+        return input_shape[0], self.num_units
 
 ##
 ## design matrices
@@ -91,7 +133,7 @@ def sparse_categorical(terms, data, N=None, drop='first'):
 
     return final_spmat, final_names
 
-def design_matrix(x=[], fe=[], data=None, intercept=True, drop='first', N=None):
+def design_matrix(x=[], fe=[], data=None, intercept=True, drop='first', separate=False, N=None):
     # construct individual matrices
     if len(x) > 0:
         x_mat, x_names = frame_matrix(x, data, N=N), x.copy()
@@ -119,8 +161,11 @@ def design_matrix(x=[], fe=[], data=None, intercept=True, drop='first', N=None):
         x_mat = np.hstack([inter, x_mat]) if x_mat is not None else inter
         x_names = ['intercept'] + x_names
 
+    # if sparse/dense separate we're done
+    if separate:
+        return x_mat, fe_mat, x_names, fe_names
+
     # handle various cases
-    names = x_names + fe_names
     if x_mat is not None and fe_mat is not None:
         mat = sp.hstack([x_mat, fe_mat], format='csr')
     elif x_mat is not None and fe_mat is None:
@@ -131,13 +176,14 @@ def design_matrix(x=[], fe=[], data=None, intercept=True, drop='first', N=None):
         mat = np.empty((N, 0))
 
     # return everything
+    names = x_names + fe_names
     return mat, names
 
-def design_matrices(y, x=[], fe=[], data=None, intercept=True, drop='first'):
+def design_matrices(y, x=[], fe=[], data=None, intercept=True, drop='first', separate=False):
     y_vec = frame_eval(y, data)
     N = len(y_vec)
-    x_mat, x_names = design_matrix(x, fe, data, N=N, intercept=intercept, drop=drop)
-    return y_vec, x_mat, x_names
+    x_ret = design_matrix(x, fe, data, N=N, intercept=intercept, drop=drop, separate=separate)
+    return (y_vec,) + x_ret
 
 ##
 ## regressions
@@ -155,41 +201,64 @@ def ols(y, x=[], fe=[], data=None, intercept=True, drop='first'):
     ret = pd.Series(dict(zip(x_names, betas)))
     return ret
 
-# feed in sparse matrix in dense batches
-class SparseDataset(keras.utils.Sequence):
-    def __init__(self, y_vec, x_mat, batch_size):
-        self.x_mat = x_mat
-        self.y_vec = y_vec
-        self.batch_size = batch_size
-        self.num_batch = int(np.floor(len(y_vec)/float(batch_size)))
-
-    def __len__(self):
-        return self.num_batch
-
-    def __getitem__(self, idx):
-        base = idx*self.batch_size
-        top = base + self.batch_size
-
-        x_bat = self.x_mat[base:top,:].todense()
-        y_bat = self.y_vec[base:top]
-
-        return x_bat, y_bat
-
-# poisson regression using keras
+# glm regression using keras
 def glm(y, x=[], fe=[], data=None, intercept=True, drop='first',
-        link='identity', loss='mse', metrics=['accuracy'],
-        batch_size=4092, epochs=3, learning_rate=0.5):
-    # find link function
+        output='params', link=None, loss='mse', like=None, batch_size=4092,
+        epochs=3, learning_rate=0.5, metrics=['accuracy']):
     if type(link) is str:
-        link = getattr(tf, link)
+        link = getattr(K, link)
+    if type(loss) is str:
+        loss = getattr(keras.losses, loss)
+
+    if like is None and loss is not None:
+        like = negate(loss)
+    if loss is None and like is not None:
+        loss = negate(like)
 
     # construct design matrices
-    y_vec, x_mat, names = design_matrices(y, x, fe, data, intercept=intercept, drop=drop)
-    _, K = x_mat.shape
+    y_vec, x_mat, fe_mat, x_names, fe_names = design_matrices(
+        y, x, fe, data, intercept=intercept, drop=drop, separate=True
+    )
+
+    # collect model components
+    x_data = [] # actual data
+    inputs = [] # input placeholders
+    activ = [] # activation layers
+    outputs = [] # activation tensors
+    names = [] # coefficient names
+
+    # check dense factors
+    if x_mat is not None:
+        _, Kd = x_mat.shape
+        inputs_dense = layers.Input((Kd,))
+        linear_dense = layers.Dense(1, use_bias=False)
+        pred_dense = linear_dense(inputs_dense)
+
+        x_data.append(x_mat)
+        inputs.append(inputs_dense)
+        activ.append(linear_dense)
+        outputs.append(pred_dense)
+        names.append(x_names)
+
+    # check sparse factors
+    if fe_mat is not None:
+        _, Ks = fe_mat.shape
+        fe_ten = sparse_tensor(fe_mat)
+        inputs_sparse = layers.Input((Ks,), sparse=True)
+        linear_sparse = SparseLayer(Ks, 1, use_bias=False)
+        pred_sparse = linear_sparse(inputs_sparse)
+
+        x_data.append(fe_ten)
+        inputs.append(inputs_sparse)
+        activ.append(linear_sparse)
+        outputs.append(pred_sparse)
+        names.append(fe_names)
 
     # construct network
-    inputs = layers.Input((K,))
-    pred = layers.Dense(1, use_bias=False)(inputs)
+    if len(outputs) > 1:
+        pred = layers.Add()(outputs)
+    else:
+        pred, = outputs
     if link is not None:
         pred = keras.layers.Lambda(link)(pred)
     model = keras.Model(inputs=inputs, outputs=pred)
@@ -197,16 +266,18 @@ def glm(y, x=[], fe=[], data=None, intercept=True, drop='first',
     # run estimation
     optim = keras.optimizers.Adagrad(learning_rate=learning_rate)
     model.compile(loss=loss, optimizer=optim, metrics=metrics)
-    if sp.issparse(x_mat):
-        dataset = SparseDataset(y_vec, x_mat, batch_size)
-        model.fit_generator(dataset, epochs=epochs)
-    else:
-        model.fit(x_mat, y_vec, epochs=epochs, batch_size=batch_size)
+    model.fit(x_data, y_vec, epochs=epochs, batch_size=batch_size)
 
-    # extract coefficients
-    betas = model.weights[0].numpy().flatten()
-    ret = pd.Series(dict(zip(names, betas)))
-    return ret
+    # construct params
+    names = sum(names, [])
+    betas = tf.concat([tf.reshape(act.weights[0], (-1,)) for act in activ], 0)
+    ret = pd.Series(dict(zip(names, betas.numpy())))
+
+    # return
+    if output == 'params':
+        return ret
+    elif output == 'model':
+        return model, ret
 
 # standard poisson regression
 def poisson(y, x=[], fe=[], data=None, **kwargs):
