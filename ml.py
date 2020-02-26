@@ -164,20 +164,17 @@ def design_matrix(x=[], fe=[], data=None, intercept=True, drop='first', separate
     # if sparse/dense separate we're done
     if separate:
         return x_mat, fe_mat, x_names, fe_names
-
-    # handle various cases
-    if x_mat is not None and fe_mat is not None:
-        mat = sp.hstack([x_mat, fe_mat], format='csr')
-    elif x_mat is not None and fe_mat is None:
-        mat = x_mat
-    elif x_mat is None and fe_spmat is not None:
-        mat = fe_mat
     else:
-        mat = np.empty((N, 0))
-
-    # return everything
-    names = x_names + fe_names
-    return mat, names
+        if x_mat is not None and fe_mat is not None:
+            mat = sp.hstack([x_mat, fe_mat], format='csr')
+        elif x_mat is not None and fe_mat is None:
+            mat = x_mat
+        elif x_mat is None and fe_spmat is not None:
+            mat = fe_mat
+        else:
+            mat = np.empty((N, 0))
+        names = x_names + fe_names
+        return mat, names
 
 def design_matrices(y, x=[], fe=[], data=None, intercept=True, drop='first', separate=False):
     y_vec = frame_eval(y, data)
@@ -193,38 +190,75 @@ def design_matrices(y, x=[], fe=[], data=None, intercept=True, drop='first', sep
 # x expects strings or expressions
 # fe can have strings or tuples of strings
 def ols(y, x=[], fe=[], data=None, intercept=True, drop='first'):
+    # make design matrices
     y_vec, x_mat, x_names = design_matrices(y, x, fe, data, intercept=intercept, drop=drop)
+    N, K = x_mat.shape
+
+    # linalg tool select
     if sp.issparse(x_mat):
-        betas = sp.linalg.spsolve(x_mat.T*x_mat, x_mat.T*y_vec)
+        solve = sp.linalg.spsolve
+        inv = sp.linalg.inv
     else:
-        betas = np.linalg.solve(np.dot(x_mat.T, x_mat), np.dot(x_mat.T, y_vec))
-    ret = pd.Series(dict(zip(x_names, betas)))
-    return ret
+        solve = np.linalg.solve
+        inv = np.linalg.inv
+
+    # find point estimates
+    xpx = x_mat.T.dot(x_mat)
+    xpy = x_mat.T.dot(y_vec)
+    betas = solve(xpx, xpy)
+
+    # find standard errors
+    y_hat = x_mat.dot(betas)
+    e_hat = y_vec - y_hat
+    s2 = np.sum(e_hat**2)/(N-K)
+    cov = s2*inv(xpx).toarray()
+    stderr = np.sqrt(cov.diagonal())
+
+    # dataframe of results
+    return pd.DataFrame({
+        'coeff': betas,
+        'stderr': stderr
+    }, index=x_names)
+
+# default link derivatives
+dlink_default = {
+    None: lambda x: np.ones_like(x),
+    'exp': lambda x: x
+}
+
+# default loss derivatives (-log(likelihood))
+eps = 1e-7
+dloss_default = {
+    'mse': lambda y, yh: yh - y,
+    'poisson': lambda y, yh: ( yh - y ) / ( yh + eps )
+}
 
 # glm regression using keras
-def glm(y, x=[], fe=[], data=None, intercept=True, drop='first',
-        output='params', link=None, loss='mse', like=None, batch_size=4092,
-        epochs=3, learning_rate=0.5, metrics=['accuracy']):
+def glm(y, x=[], fe=[], data=None, intercept=True, drop='first', output='params', link='identity', loss='mse', batch_size=4092, epochs=3, learning_rate=0.5, metrics=['accuracy'], dlink=None, dloss=None):
+    if type(link) in (None, str):
+        dlink = dlink_default.get(link, None)
+    if type(loss) is str:
+        dloss = dloss_default.get(loss, None)
+
     if type(link) is str:
-        link = getattr(K, link)
+        if link == 'identity':
+            link = tf.identity
+        else:
+            link = getattr(K, link)
     if type(loss) is str:
         loss = getattr(keras.losses, loss)
-
-    if like is None and loss is not None:
-        like = negate(loss)
-    if loss is None and like is not None:
-        loss = negate(like)
 
     # construct design matrices
     y_vec, x_mat, fe_mat, x_names, fe_names = design_matrices(
         y, x, fe, data, intercept=intercept, drop=drop, separate=True
     )
+    N = len(y_vec)
 
     # collect model components
     x_data = [] # actual data
     inputs = [] # input placeholders
-    activ = [] # activation layers
-    outputs = [] # activation tensors
+    linear = [] # linear layers
+    inter = [] # intermediate values
     names = [] # coefficient names
 
     # check dense factors
@@ -232,12 +266,12 @@ def glm(y, x=[], fe=[], data=None, intercept=True, drop='first',
         _, Kd = x_mat.shape
         inputs_dense = layers.Input((Kd,))
         linear_dense = layers.Dense(1, use_bias=False)
-        pred_dense = linear_dense(inputs_dense)
+        inter_dense = linear_dense(inputs_dense)
 
         x_data.append(x_mat)
         inputs.append(inputs_dense)
-        activ.append(linear_dense)
-        outputs.append(pred_dense)
+        linear.append(linear_dense)
+        inter.append(inter_dense)
         names.append(x_names)
 
     # check sparse factors
@@ -246,21 +280,17 @@ def glm(y, x=[], fe=[], data=None, intercept=True, drop='first',
         fe_ten = sparse_tensor(fe_mat)
         inputs_sparse = layers.Input((Ks,), sparse=True)
         linear_sparse = SparseLayer(Ks, 1, use_bias=False)
-        pred_sparse = linear_sparse(inputs_sparse)
+        inter_sparse = linear_sparse(inputs_sparse)
 
         x_data.append(fe_ten)
         inputs.append(inputs_sparse)
-        activ.append(linear_sparse)
-        outputs.append(pred_sparse)
+        linear.append(linear_sparse)
+        inter.append(inter_sparse)
         names.append(fe_names)
 
     # construct network
-    if len(outputs) > 1:
-        pred = layers.Add()(outputs)
-    else:
-        pred, = outputs
-    if link is not None:
-        pred = keras.layers.Lambda(link)(pred)
+    core = layers.Add()(inter) if len(inter) > 1 else inter[0]
+    pred = keras.layers.Lambda(link)(core)
     model = keras.Model(inputs=inputs, outputs=pred)
 
     # run estimation
@@ -270,14 +300,27 @@ def glm(y, x=[], fe=[], data=None, intercept=True, drop='first',
 
     # construct params
     names = sum(names, [])
-    betas = tf.concat([tf.reshape(act.weights[0], (-1,)) for act in activ], 0)
-    ret = pd.Series(dict(zip(names, betas.numpy())))
+    betas = tf.concat([tf.reshape(act.weights[0], (-1,)) for act in linear], 0)
+    coeff = pd.Series(dict(zip(names, betas.numpy())))
+
+    # generate predictions
+    y_hat = model.predict(x_data).flatten()
+
+    # calculate standard errors
+    if dlink is not None and dloss is not None:
+        dlink_vec = dlink(y_hat)
+        dloss_vec = dloss(y_vec, y_hat)
+        dpred_vec = dlink_vec*dloss_vec
+        dlike_dense = dpred_vec[:,None]*x_mat
+        fisher_dense = np.matmul(dlike_dense.T, dlike_dense)
+        dlike_sparse = fe_mat.multiply(dpred_vec[:, None])
+        fisher_sparse = (dlike_sparse.T*dlike_sparse)
 
     # return
     if output == 'params':
-        return ret
+        return coeff, fisher_dense, fisher_sparse
     elif output == 'model':
-        return model, ret
+        return model, coeff, fisher_dense, fisher_sparse
 
 # standard poisson regression
 def poisson(y, x=[], fe=[], data=None, **kwargs):
