@@ -1,3 +1,4 @@
+import re
 from itertools import islice
 
 # print iterator progress
@@ -46,3 +47,18 @@ def merge(*ds, **kw):
         for k, v in d.items():
             ret[k] = v
     return ret
+
+# file sorting tool
+def atoi(text):
+    return int(text) if text.isdigit() else text
+
+def natural_keys(text):
+    '''
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    '''
+    return [ atoi(c) for c in re.split(r'(\d+)', text) ]
+
+def natural_sort(text):
+    return sorted(text, key=natural_keys)

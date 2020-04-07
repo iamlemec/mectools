@@ -21,8 +21,8 @@ def noinf(s):
 def nonan(s):
     return s[~np.isnan(s)]
 
-def log(s):
-    return noinf(np.log(s))
+def log(s, base=np.e):
+    return noinf(np.log(s)/np.log(base))
 
 def winsorize(s, level=0.05):
     if type(level) not in (list, tuple):
@@ -98,6 +98,8 @@ def gini(x):
 ##
 
 def lag_merge(data, tvar, id_vars=[], suffix='_prev', how='left', offset=-1):
+    data = data.copy()
+
     if type(id_vars) is str:
         id_vars = [id_vars]
 

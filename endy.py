@@ -231,8 +231,16 @@ def deriv(y, x, axis=0, direc='both', pad=True):
 # generate continuous rv by linearly interpolating using cmf approximations
 def random_vec(probs, nf, state=np.random):
     nbins, = probs.shape
-    assert((np.log2(nbins)%1.0)==0.0) # only powers of two
 
+    # pad to power of 2 with ones
+    if nbins & (nbins-1) > 0:
+        nb = 1
+        while nb < nbins:
+            nb <<= 2
+        probs = np.r_[probs, np.ones(nb-nbins)]
+        nbins = nb
+
+    # parallel binary search
     x = state.rand(nf)
     bstep = nbins >> 1
     bpos = np.zeros(nf, dtype=np.int)
