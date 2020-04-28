@@ -18,7 +18,9 @@ def noinf(s):
     s[np.isinf(s)] = np.nan
     return s
 
-def nonan(s):
+def dropna(s, inf=True):
+    if inf:
+        s = noinf(s)
     return s[~np.isnan(s)]
 
 def log(s, base=np.e):

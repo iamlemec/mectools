@@ -4,6 +4,7 @@ import os
 import json
 import numpy as np
 import pandas as pd
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 # defaults
@@ -262,6 +263,70 @@ def grid_plots(eqvars, x_vars, y_vars, shape, x_names=None, y_names=None,
         plt.show()
     else:
         plt.close()
+
+##
+## log plots
+##
+
+def gen_ticks(ymin, ymax):
+    ppow = np.floor(np.log10(ymin))
+    pnum = ymin/np.power(10.0, ppow)
+
+    if pnum < 2:
+        pnum = 1
+    elif pnum < 5:
+        pnum = 2
+    else:
+        pnum = 5
+
+    while (yval := pnum*(10**ppow)) <= ymax:
+        yield yval
+
+        if pnum == 1:
+            pnum = 2
+        elif pnum == 2:
+            pnum = 5
+        else:
+            pnum = 1
+            ppow += 1
+
+    yield yval
+
+class FixedLogScale(mpl.scale.ScaleBase):
+    name = 'fixed_log'
+
+    def __init__(self, axis, scale=1e6):
+        super().__init__(axis)
+        self.scale = scale
+
+    def get_transform(self):
+        return mpl.scale.FuncTransform(np.log, np.exp)
+
+    def set_default_locators_and_formatters(self, axis):
+        class InverseFormatter(mpl.ticker.Formatter):
+            def __init__(self, scale):
+                self.scale = scale
+
+            def __call__(self, x, pos=None):
+                d = self.scale*x
+                if d >= 1:
+                    return '%d' % int(d)
+                else:
+                    return '%.1f' % d
+
+        ymin, ymax = axis.get_view_interval()
+        ymin = np.maximum(1/self.scale, ymin)
+        ticks = list(gen_ticks(ymin, ymax))
+        loc = mpl.ticker.FixedLocator(ticks)
+
+        axis.set_major_locator(loc)
+        axis.set_major_formatter(InverseFormatter(self.scale))
+        axis.set_minor_locator(mpl.ticker.NullLocator())
+mpl.scale.register_scale(FixedLogScale)
+
+##
+## diagram framework
+##
 
 class Diagram():
     def __init__(self, title=None, xlabel=None, ylabel=None, xlim=None, ylim=None, xticks=None, yticks=None, xtick_labels=None, ytick_labels=None, **kwargs):
