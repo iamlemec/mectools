@@ -15,6 +15,7 @@ import statsmodels.formula.api as smf
 ##
 
 def noinf(s):
+    s = np.array(s)
     s[np.isinf(s)] = np.nan
     return s
 

@@ -4,11 +4,19 @@ import os
 import json
 import numpy as np
 import pandas as pd
+import scipy.stats as stats
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
+from . import data as dt
+
 # defaults
 figsize0 = 5, 4
+
+# neon colors
+neon_blue = '#1e88e5'
+neon_red = '#ff0d57'
+neon_green = '#13b755'
 
 def save_plot(yvars=None, xvar='index', data=None, title=None, labels=None, xlabel=None, ylabel=None, legend=True, xlim=None, ylim=None, figsize=figsize0, tight=True):
     if yvars is None:
@@ -263,6 +271,88 @@ def grid_plots(eqvars, x_vars, y_vars, shape, x_names=None, y_names=None,
         plt.show()
     else:
         plt.close()
+
+##
+## distributions over paths
+##
+
+def path_dist(df, ax=None, kind='shade', median=True, mean=True, wins=False, wgt=None, quants=None, qmin=0.05, qmax=0.45, alpha=None, color1=neon_blue, color2=neon_red):
+    if type(df) is np.ndarray:
+        df = pd.DataFrame(df)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.get_figure()
+
+    if wgt is None:
+        wgt = np.ones(df.shape[1])
+    elif type(wgt) is str:
+        wgt = df[wgt]
+
+    if quants is None:
+        quants = 25
+    if type(quants) is int:
+        quants = np.linspace(qmin, qmax, quants)
+
+    if alpha is None:
+        if kind == 'shade':
+            alpha = 1.5/len(quants)
+        elif kind == 'wisp':
+            alpha = 0.1
+
+    if median:
+        df.median(axis=1).plot(ax=ax, c=color1)
+
+    if mean:
+        if wins:
+            vmin, vmax = df.quantile(qmin, axis=1), df.quantile(qmax, axis=1)
+            df1 = df.clip(vmin, vmax, axis=0)
+        else:
+            df1 = df
+        df1.mul(wgt, axis=1).sum(axis=1).div((df1.notna()*wgt).sum(axis=1)).plot(ax=ax, c=color2)
+
+    if kind == 'shade':
+        for x in quants:
+            ax.fill_between(df.index, df.quantile(0.5-x, axis=1), df.quantile(0.5+x, axis=1), alpha=alpha, color=color1)
+    elif kind == 'wisp':
+        n = len(df.columns)
+        per = max(1, n // 100)
+        df.loc[:, ::per].plot(c=color1, alpha=alpha, ax=ax, legend=False)
+
+    return ax
+
+def kdeplot(df, ax=None, clip=None, wins=0.001, nbins=100, bw=None, fill=True, alpha=0.3, color1=neon_blue, color2=neon_red):
+    if ax is None:
+        _, ax = plt.subplots()
+
+    # infs to nans
+    df = dt.noinf(df)
+    if type(df) is np.ndarray:
+        df = pd.Series(df)
+    if type(df) is pd.Series:
+        df = pd.DataFrame(df)
+
+    # find grid
+    if clip is None:
+        vmin = df.quantile(wins).min()
+        vmax = df.quantile(1-wins).max()
+    else:
+        vmin, vmax = clip
+    grid = np.linspace(vmin, vmax, nbins)
+
+    # compute kde and plot
+    for s in df:
+        dat = df[s].dropna().clip(vmin, vmax)
+        kde = stats.gaussian_kde(dat, bw_method=bw)
+        pdf = kde(grid)
+        ax.plot(grid, pdf, linewidth=1, color=color2)
+        if fill:
+            ax.fill_between(grid, 0, pdf, alpha=alpha, color=color1)
+        ax.set_ylim(bottom=0)
+        ax.set_xlim(vmin, vmax)
+
+    return ax
 
 ##
 ## log plots
