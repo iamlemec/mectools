@@ -369,7 +369,8 @@ def gen_ticks(ymin, ymax):
     else:
         pnum = 5
 
-    while (yval := pnum*(10**ppow)) <= ymax:
+    yval = pnum*(10**ppow)
+    while yval <= ymax:
         yield yval
 
         if pnum == 1:
@@ -379,6 +380,8 @@ def gen_ticks(ymin, ymax):
         else:
             pnum = 1
             ppow += 1
+
+        yval = pnum*(10**ppow)
 
     yield yval
 
