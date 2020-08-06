@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-import pytoml as toml
+import toml
 import click
 
 # screen commands

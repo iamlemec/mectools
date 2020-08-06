@@ -5,8 +5,10 @@ import json
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
+import statsmodels.api as sm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 from . import data as dt
 
@@ -75,6 +77,10 @@ def scatter_label(xvar, yvar, data, labels='index', offset=0.02, figsize=figsize
 
     return ax
 
+def v_range(s, wins):
+    s1 = dt.winsorize(s, level=wins)
+    return s1.min(), s1.max()
+
 # pretty flexible dataframe correlation plotter
 def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None,
               x_range=None, y_range=None, x_name=None, y_name=None, title='',
@@ -139,7 +145,7 @@ def corr_info(datf, x_var, y_var, w_var=None, c_var='index', ax=None,
         y_vals = res.predict(xp_vals)
 
     # raw correlations
-    corr, corr_pval = corr_robust(datf_sel, x_var, y_var, wcol=w_var)
+    corr, corr_pval = dt.corr_robust(datf_sel, x_var, y_var, wcol=w_var)
 
     # display regression results
     if reg_type != 'kernel':
@@ -335,8 +341,12 @@ def kdeplot(df, ax=None, clip=None, wins=0.001, nbins=100, bw=None, fill=True, a
 
     # find grid
     if clip is None:
-        vmin = df.quantile(wins).min()
-        vmax = df.quantile(1-wins).max()
+        if type(wins) is not tuple:
+            winsl, winsr = wins, wins
+        else:
+            winsl, winsr = wins
+        vmin = df.quantile(winsl).min()
+        vmax = df.quantile(1-winsr).max()
     else:
         vmin, vmax = clip
     grid = np.linspace(vmin, vmax, nbins)
@@ -416,101 +426,3 @@ class FixedLogScale(mpl.scale.ScaleBase):
         axis.set_major_formatter(InverseFormatter(self.scale))
         axis.set_minor_locator(mpl.ticker.NullLocator())
 mpl.scale.register_scale(FixedLogScale)
-
-##
-## diagram framework
-##
-
-class Diagram():
-    def __init__(self, title=None, xlabel=None, ylabel=None, xlim=None, ylim=None, xticks=None, yticks=None, xtick_labels=None, ytick_labels=None, **kwargs):
-        (self.fig, self.ax) = plt.subplots(**kwargs)
-
-        if title: self.ax.set_title(title)
-        if xlabel: self.ax.set_xlabel(xlabel)
-        if ylabel: self.ax.set_ylabel(ylabel)
-        if xlim: self.ax.set_xlim(xlim)
-        if ylim: self.ax.set_ylim(ylim)
-        if xticks:
-            self.ax.set_xticks(xticks)
-            if xtick_labels:
-                self.ax.set_xticklabels(xtick_labels)
-        else:
-            self.ax.set_xticks([])
-        if yticks:
-            self.ax.set_yticks(yticks)
-            if ytick_labels:
-                self.ax.set_yticklabels(ytick_labels)
-        else:
-            self.ax.set_yticks([])
-
-    def line(self, **kwargs):
-        return SymbolicLine(self.ax, **kwargs)
-
-    def annotate(self, x, y, text, prop=True, **kwargs):
-        if prop:
-            xlim = self.ax.get_xlim()
-            ylim = self.ax.get_ylim()
-            xran = xlim[1] - xlim[0]
-            yran = ylim[1] - ylim[0]
-            x *= xran
-            y *= yran
-        return self.ax.annotate(text, xy=(x, y), **kwargs)
-
-    def show(self):
-        self.fig.show()
-
-    def save(self, fname):
-        self.fig.savefig(fname)
-
-fontsize0 = 15
-arrowprops0 = {'arrowstyle': '-|>', 'connectionstyle': 'angle3', 'linewidth': 1.2, 'edgecolor': 'black', 'facecolor': 'white'}
-
-class SymbolicLine:
-    def __init__(self, ax, eq=None, vert=None):
-        self.eq = eq
-        self.ax = ax
-        self.vert = vert
-
-    def plot(self, xlim=None, ylim=None, N=128, fill=False, fill_color=None, **kwargs):
-        if xlim is None:
-            xlim = self.ax.get_xlim()
-        if ylim is None:
-            ylim = self.ax.get_ylim()
-        if self.vert is None:
-            xvec = np.linspace(xlim[0], xlim[1], N)
-            yvec = self.eq(xvec)
-        else:
-            xvec = self.vert*np.ones(N)
-            yvec = np.linspace(ylim[0], ylim[1], N)
-        line = self.ax.plot(xvec, yvec, **kwargs)
-        if fill:
-            self.ax.fill_between(xvec, yvec, color=fill_color)
-        return line
-
-    def point(self, x ,**kwargs):
-        y = self.eq(x)
-        return self.ax.scatter(x, y, **kwargs)
-
-    def annotate(self, text, xy, offset, fontsize=fontsize0, arrowprops=arrowprops0, **kwargs):
-        if self.vert is None:
-            x = xy
-            y = self.eq(xy)
-        else:
-            x = self.vert
-            y = xy
-        return self.ax.annotate(text, xy=(x, y), xytext=(x+offset[0], y+offset[1]), fontsize=fontsize, arrowprops=arrowprops, **kwargs)
-
-    def annotate_prop(self, text, xyp, offset, fontsize=fontsize0, arrowprops=arrowprops0, **kwargs):
-        xlim = self.ax.get_xlim()
-        ylim = self.ax.get_ylim()
-        xran = xlim[1] - xlim[0]
-        yran = ylim[1] - ylim[0]
-        if self.vert is None:
-            xy = xran*xyp
-            x = xy
-            y = self.eq(x)
-        else:
-            xy = yran*xyp
-            x = self.vert
-            y = xy
-        return self.ax.annotate(text, xy=(x, y), xytext=(x+xran*offset[0], y+yran*offset[1]), fontsize=fontsize, arrowprops=arrowprops, **kwargs)
