@@ -97,6 +97,12 @@ def gini(x):
     B = np.sum(np.arange(N, 0, -1)*np.sort(x))/(N*np.sum(x))
     return 1 + 1/N - 2*B
 
+def pmf(x, bins=10, range=None):
+    count, bins = np.histogram(x, bins=bins, range=range)
+    xpmf = count/len(x)
+    mids = 0.5*(bins[1:]+bins[:-1])
+    return mids, xpmf
+
 ##
 ## merging tools
 ##

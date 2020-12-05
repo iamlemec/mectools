@@ -24,6 +24,11 @@ def iprogress(it, per=100, fmt='%s'):
             print(fmt % str(i))
     print(fmt % 'done')
 
+def tee(it):
+    for x in it:
+        print(x)
+        yield x
+
 # generator of chunks
 def chunks(it, size=100):
     itr = iter(it)

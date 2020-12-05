@@ -19,6 +19,7 @@ figsize0 = 5, 4
 neon_blue = '#1e88e5'
 neon_red = '#ff0d57'
 neon_green = '#13b755'
+neon_purple = '#8172b2'
 
 def save_plot(yvars=None, xvar='index', data=None, title=None, labels=None, xlabel=None, ylabel=None, legend=True, xlim=None, ylim=None, figsize=figsize0, tight=True):
     if yvars is None:
@@ -282,12 +283,12 @@ def grid_plots(eqvars, x_vars, y_vars, shape, x_names=None, y_names=None,
 ## distributions over paths
 ##
 
-def path_dist(df, ax=None, kind='shade', median=True, mean=True, wins=False, wgt=None, quants=None, qmin=0.05, qmax=0.45, alpha=None, color1=neon_blue, color2=neon_red):
+def path_dist(df, ax=None, kind='shade', median=True, mean=True, wins=False, wgt=None, quants=None, qmin=0.05, qmax=0.45, alpha=None, figsize=None, color1=neon_blue, color2=neon_red):
     if type(df) is np.ndarray:
         df = pd.DataFrame(df)
 
     if ax is None:
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=figsize)
     else:
         fig = ax.get_figure()
 
@@ -320,7 +321,9 @@ def path_dist(df, ax=None, kind='shade', median=True, mean=True, wins=False, wgt
 
     if kind == 'shade':
         for x in quants:
-            ax.fill_between(df.index, df.quantile(0.5-x, axis=1), df.quantile(0.5+x, axis=1), alpha=alpha, color=color1)
+            qlo = df.quantile(0.5-x, axis=1)
+            qhi = df.quantile(0.5+x, axis=1)
+            ax.fill_between(df.index, qlo, qhi, alpha=alpha, color=color1)
     elif kind == 'wisp':
         n = len(df.columns)
         per = max(1, n // 100)
