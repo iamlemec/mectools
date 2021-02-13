@@ -120,7 +120,7 @@ def reg_stats(res, stats={}):
     return pd.Series({lab: getattr(res, att, np.nan) for lab, att in stats.items()})
 
 # TODO: take extra stats dict, deal with nans
-def regtab_latex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=latex_escape, stats=stats0, save=None):
+def regtab_latex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', num_func=None, par_func=None, stars=False, escape=latex_escape, stats=stats0, save=None):
     def num_func_def(x):
         if np.isnan(x):
             return ''
@@ -135,7 +135,7 @@ def regtab_latex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', nu
 
     def par_func_def(x):
         ret = num_func(x['param'])
-        if not np.isnan(x['pvalue']):
+        if stars and not np.isnan(x['pvalue']):
             ret = '{%s}^{%s}' % (ret, star_map(x['pvalue']))
         if not np.isnan(x['stderr']):
             ret = '$\\begin{array}{c} %s \\\\ (%s) \\end{array}$' % (ret, num_func(x['stderr']))
