@@ -59,22 +59,30 @@ def save_plot(yvars=None, xvar='index', data=None, title=None, labels=None, xlab
 
     return fig
 
-def scatter_label(xvar, yvar, data, labels='index', offset=0.02, figsize=figsize0, ax=None):
-    if labels != 'index':
-        data = data.dropna(subset=[labels]).set_index(labels)
+def scatter_label(xvar, yvar, data, labels=None, alpha=None, offset=0.02, figsize=figsize0, ax=None):
+    cols = [xvar, yvar]
+    if labels is not None:
+        cols += [labels]
+    if alpha is not None:
+        cols += [alpha]
+    data = data[cols].dropna().copy()
 
-    data = data[[xvar, yvar]].dropna()
+    if labels is not None:
+        data = data.set_index(labels)
+    if alpha is None:
+        alpha = 'alpha'
+        data['alpha'] = 1
+
     if ax is None: _, ax = plt.subplots(figsize=figsize)
     data.plot.scatter(x=xvar, y=yvar, s=0, ax=ax)
 
     ymin, ymax = ax.get_ylim()
     xmin, xmax = ax.get_xlim()
-    ylim, xlim = ymax - ymin, xmax - xmin
+    ydel, xdel = ymax - ymin, xmax - xmin
 
-    for txt in data.index:
-        ymin, ymax = ax.get_ylim()
-        xmin, xmax = ax.get_xlim()
-        ax.annotate(txt, (data.loc[txt, xvar]-0.02*(xmax-xmin), data.loc[txt, yvar]-0.02*(ymax-ymin)))
+    for txt, row in data.iterrows():
+        pos = row[xvar] - 0.02*xdel, row[yvar] - 0.02*ydel
+        ax.annotate(txt, pos, alpha=row[alpha])
 
     return ax
 

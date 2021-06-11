@@ -10,7 +10,7 @@ cmd_start = 'screen -L -S {unit} -d -m {cmd}'
 cmd_shell = 'screen -L -S {unit} -d -m $SHELL -c "{cmd}"'
 cmd_kill = 'screen -S {unit} -X quit'
 cmd_log = 'less screenlog.0'
-cmd_tail = 'tail screenlog.0 {follow}'
+cmd_tail = 'tail -n {n} {follow} screenlog.0'
 
 # directories
 script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -140,12 +140,13 @@ def log(unit):
 
 @cli.command()
 @click.argument('unit')
+@click.option('-n', default=10)
 @click.option('-f', is_flag=True)
-def tail(unit, f):
+def tail(unit, n, f):
     info = specs[unit]
     flag = '-f' if f else ''
     os.chdir(info['dir'])
-    os.system(cmd_tail.format(follow=flag))
+    os.system(cmd_tail.format(n=n, follow=flag))
     os.chdir(base_dir)
 
 if __name__ == '__main__':

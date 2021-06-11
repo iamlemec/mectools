@@ -1,0 +1,59 @@
+#! /usr/bin/env python
+
+import os
+import sys
+import subprocess
+
+## template
+
+template = """
+\\documentclass[12pt]{article}
+
+\\usepackage{amsmath}
+\\usepackage{amssymb}
+\\usepackage{geometry}
+\\usepackage{color}
+
+\\geometry{top=0in,bottom=0in,left=0in,right=0in}
+
+\\begin{document}
+
+\\thispagestyle{empty}
+
+%s
+
+\\end{document}
+""".strip()
+
+## load args
+
+ftab = sys.argv[1]
+fdir, fname = os.path.split(ftab)
+ftag, _ = os.path.splitext(fname)
+fout = os.path.join(fdir, f'{ftag}.svg')
+
+ftex = os.path.join('/tmp', f'{ftag}.tex')
+fpdf = os.path.join('/tmp', f'{ftag}.pdf')
+fsvg = os.path.join('/tmp', f'{ftag}.svg')
+
+## generate tex
+
+with open(ftab) as fid:
+    tex = fid.read()
+
+tout = template % tex
+with open(ftex, 'w+') as fid:
+    fid.write(tout)
+
+## compile tex
+
+comp = subprocess.run(f'pdflatex {ftex}', cwd='/tmp', shell=True)
+
+if comp.returncode == 0:
+    subprocess.run(f'pdfcrop {fpdf} {fpdf}', shell=True)
+    subprocess.run(f'pdf2svg {fpdf} {fsvg}', shell=True)
+    subprocess.run(f'cp {fsvg} {fout}', shell=True)
+    print('Success!')
+else:
+    print('Compile failed!')
+

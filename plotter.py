@@ -6,7 +6,7 @@ import matplotlib.style
 from statsmodels.nonparametric.kde import kdensity
 
 # patcher loader for matplotlib
-def plotter(pyplot=True, backend='svg', theme=['clean'], rc={}):
+def plotter(backend='svg', theme=['clean'], pyplot=True, rc={}):
     mpl.use(backend)
     mpl.style.use(theme)
     mpl.rcParams.update(rc)
