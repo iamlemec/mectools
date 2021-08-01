@@ -109,18 +109,45 @@ stats0 = {
     'F Statistic': 'fvalue'
 }
 
-def reg_dict(res):
+def dict_like(d):
+    return type(d) in (dict, OrderedDict)
+
+def reg_stderr(res):
+    return pd.Series(
+        np.sqrt(res.cov_params().values.diagonal()),
+        index=res.model.exog_names
+    )
+
+def reg_frame(res, swap=False):
+    if dict_like(res):
+        df = pd.concat({
+            k: reg_frame(v) for k, v in res.items()
+        }, axis=1)
+        if swap:
+            return df.swaplevel(axis=1).sort_index(axis=1)
+        else:
+            return df
+
     return pd.concat({
         'param': res.params,
-        'stderr': pd.Series(np.sqrt(res.cov_params().values.diagonal()), index=res.model.exog_names),
+        'stderr': reg_stderr(res),
         'pvalue': res.pvalues,
     }, axis=1)
 
 def reg_stats(res, stats={}):
-    return pd.Series({lab: getattr(res, att, np.nan) for lab, att in stats.items()})
+    if dict_like(res):
+        return pd.concat({
+            k: reg_stats(v, stats=stats) for k, v in res.items()
+        }, axis=1)
+    return pd.Series({
+        lab: getattr(res, att, np.nan) for lab, att in stats.items()
+    })
 
 # TODO: take extra stats dict, deal with nans
-def regtab_latex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', num_func=None, par_func=None, stars=False, escape=latex_escape, stats=stats0, save=None):
+def regtab_latex(
+    info, labels=None, columns=None, note=None, num_fmt='%6.4f', num_func=None,
+    par_func=None, stars=False, escape=latex_escape, stats=stats0, save=None
+):
     def num_func_def(x):
         if np.isnan(x):
             return ''
@@ -143,19 +170,25 @@ def regtab_latex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', nu
     if par_func is None:
         par_func = par_func_def
 
+    usecols = ['param', 'stderr']
+    if stars:
+        usecols.append('pvalue')
+
     # see if it's a dict of regression results and if so turn it into a table
     # with (reg, stat) columns and (exog_name) rows. otherwise, should aleady
     # be one of these.
-    if type(info) in (dict, OrderedDict):
-        stats = pd.concat([reg_stats(res, stats) for res in info.values()], keys=list(info), axis=1)
-        info = pd.concat([reg_dict(res) for res in info.values()], keys=list(info), axis=1)
+    if dict_like(info):
+        stats = reg_stats(info, stats=stats)
+        info = reg_frame(info)
 
     # handle column name and order
-    if columns is not None:
+    if type(columns) in (dict, OrderedDict):
         corder = list(columns.values())
         info = info[list(columns)]
         if type(columns) is dict:
             info = info.rename(columns, axis=1)
+    elif type(columns) in (tuple, list):
+        corder = list(columns)
     else:
         corder = list(info.columns.levels[0])
     ncol = len(corder)
@@ -179,7 +212,7 @@ def regtab_latex(info, labels=None, columns=None, note=None, num_fmt='%6.4f', nu
     tcode += '\\\\\n'
     for i, v in info.iterrows():
         vp = v.unstack(level=-1)
-        tcode += escape(i) +  ' & ' + ' & '.join([par_func(x) for j, x in vp[['param', 'stderr', 'pvalue']].loc[corder].iterrows()]) + ' \\\\\n'
+        tcode += escape(i) +  ' & ' + ' & '.join([par_func(x) for j, x in vp[usecols].loc[corder].iterrows()]) + ' \\\\\n'
         tcode += '\\\\\n'
     tcode += '\\midrule\n'
     if stats is not None:
@@ -231,7 +264,10 @@ def markdown_escape(s):
     s1 = s.replace('*', '\\*')
     return s1
 
-def regtab_markdown(info, labels={}, order=None, note=None, num_fmt='%6.4f', num_func=None, par_func=None, escape=markdown_escape, stats=stats0, fname=None):
+def regtab_markdown(
+    info, labels={}, order=None, note=None, num_fmt='%6.4f', num_func=None,
+    par_func=None, escape=markdown_escape, stats=stats0, stars=False, save=None
+):
     def num_func_def(x):
         if np.isnan(x):
             return ''
@@ -246,37 +282,45 @@ def regtab_markdown(info, labels={}, order=None, note=None, num_fmt='%6.4f', num
 
     def par_func_def(x):
         ret = num_func(x['param'])
-        if not np.isnan(x['pval']):
+        if stars and not np.isnan(x['pvalue']):
             ret += star_map(x['pval'], star='\\*')
-        if not np.isnan(x['stder']):
-            ret += '<br/>(%s)' % num_func(x['stder'])
+        if not np.isnan(x['stderr']):
+            ret = '%s<br/>(%s)' % (ret, num_func(x['stderr']))
         return ret
     if par_func is None:
         par_func = par_func_def
 
-    nres = len(info)
-    regs = list(info)
+    usecols = ['param', 'stderr']
+    if stars:
+        usecols.append('pvalue')
 
-    data = pd.concat([pd.DataFrame({
-        (col, 'param'): res.params,
-        (col, 'stder'): np.sqrt(res.cov_params().values.diagonal()),
-        (col, 'pval' ): res.pvalues
-    }) for col, res in info.items()], axis=1)
-    if len(labels) > 0: data = data.loc[labels].rename(labels)
+    # see if it's a dict of regression results and if so turn it into a table
+    # with (reg, stat) columns and (exog_name) rows. otherwise, should aleady
+    # be one of these.
+    if dict_like(info):
+        stats = reg_stats(info, stats=stats)
+        info = reg_frame(info)
+
+    regs = info.columns.levels[0]
+    nres = len(regs)
+
+    if len(labels) > 0:
+        info = info.loc[labels].rename(labels)
 
     tcode = ''
-    tcode += '| - | ' + ' | '.join([escape(s) for s in info]) + ' |\n'
+    tcode += '| - | ' + ' | '.join([escape(s) for s in regs]) + ' |\n'
     tcode += '| - |' + ' - |'*nres + '\n'
-    for i, v in data.iterrows():
+    for i, v in info.iterrows():
         vp = v.unstack(level=-1)
-        tcode += '| ' + i +  ' | ' + ' | '.join([par_func(x) for i, x in vp[['param', 'stder', 'pval']].loc[regs].iterrows()]) + ' |\n'
-    for lab, att in stats.items():
-        tcode += '| ' + lab + ' | ' + ' | '.join([num_func(getattr(res, att, np.nan)) for res in info.values()]) + ' |\n'
+        tcode += '| ' + i +  ' | ' + ' | '.join([par_func(x) for i, x in vp[usecols].loc[regs].iterrows()]) + ' |\n'
+    if stats is not None:
+        for i, v in stats.iterrows():
+            tcode += '| ' + i + ' | ' + ' | '.join([num_func(x) for j, x in v.iteritems()]) + ' |\n'
     if note is not None:
         tcode += '*Note:* ' + escape(note)
 
-    if fname is not None:
-        with open(fname, 'w+') as fid:
+    if save is not None:
+        with open(save, 'w+') as fid:
             fid.write(tcode)
 
     return tcode

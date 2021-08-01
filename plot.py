@@ -291,7 +291,11 @@ def grid_plots(eqvars, x_vars, y_vars, shape, x_names=None, y_names=None,
 ## distributions over paths
 ##
 
-def path_dist(df, ax=None, kind='shade', median=True, mean=True, wins=False, wgt=None, quants=None, qmin=0.05, qmax=0.45, alpha=None, figsize=None, color1=neon_blue, color2=neon_red):
+def path_dist(
+    df, ax=None, kind='shade', median=True, mean=True, wins=False, wgt=None,
+    quants=None, qmin=0.05, qmax=0.45, alpha=None, figsize=None, color1=neon_blue,
+    color2=neon_red
+):
     if type(df) is np.ndarray:
         df = pd.DataFrame(df)
 
