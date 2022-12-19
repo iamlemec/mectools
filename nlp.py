@@ -1,13 +1,11 @@
-import sqlite3
+import numpy as np
 import scipy.sparse as sp
-import pandas as pd
-from sklearn.feature_extraction.text as fe
 
 ##
 ## sparse word frequency matrices
 ##
 
-def weight_counts(counts, weights=None, norm='l2'):
+def weight_counts(counts, weights=None, norm=True):
     ndoc, ntok = counts.shape
 
     # compute tfidf weights
@@ -19,7 +17,7 @@ def weight_counts(counts, weights=None, norm='l2'):
     counts = counts*sp.spdiags(weights, 0, ntok, ntok)
 
     # apply l2 normalization
-    if norm == 'l2':
+    if norm:
         l2sum = counts.multiply(counts).sum(axis=1).getA1()
         counts = sp.spdiags(1.0/np.sqrt(l2sum), 0, ndoc, ndoc)*counts
 
