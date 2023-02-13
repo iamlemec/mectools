@@ -59,19 +59,31 @@ def save_plot(yvars=None, xvar='index', data=None, title=None, labels=None, xlab
 
     return fig
 
-def scatter_label(xvar, yvar, data, labels=None, alpha=None, offset=0.02, figsize=figsize0, ax=None):
+def scatter_label(xvar, yvar, data, labels=None, alpha=None, size=None, figsize=figsize0, ax=None):
+    # get relevant columns and copy
     cols = [xvar, yvar]
     if labels is not None:
         cols += [labels]
-    if alpha is not None:
+    if type(alpha) is str:
         cols += [alpha]
+    if type(size) is str:
+        cols += [size]
     data = data[cols].dropna().copy()
+
+    # set defaults
+    if alpha is None:
+        alpha = 1
+    if size is None:
+        size = 12
 
     if labels is not None:
         data = data.set_index(labels)
-    if alpha is None:
+    if type(alpha) is not str:
+        data['alpha'] = alpha
         alpha = 'alpha'
-        data['alpha'] = 1
+    if type(size) is not str:
+        data['size'] = size
+        size = 'size'
 
     if ax is None: _, ax = plt.subplots(figsize=figsize)
     data.plot.scatter(x=xvar, y=yvar, s=0, ax=ax)
@@ -82,7 +94,7 @@ def scatter_label(xvar, yvar, data, labels=None, alpha=None, offset=0.02, figsiz
 
     for txt, row in data.iterrows():
         pos = row[xvar] - 0.02*xdel, row[yvar] - 0.02*ydel
-        ax.annotate(txt, pos, alpha=row[alpha])
+        ax.annotate(txt, pos, alpha=row[alpha], fontsize=row[size])
 
     return ax
 
