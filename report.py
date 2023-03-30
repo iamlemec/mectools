@@ -371,3 +371,32 @@ def report_latex(info, save=None):
         save_latex(body, save)
     else:
         return body
+
+def save_table(fname_input, svg=False, temp='/tmp'):
+    fname_base, _ = os.path.splitext(fname_input)
+
+    # read table
+    with open(fname_input, 'r') as fid:
+        table = fid.read()
+
+    # move to temp
+    cwd = os.getcwd()
+    os.chdir(temp)
+
+    # write latex file
+    latex = latex_template % table
+    with open(fname_input, 'w+') as fid:
+        fid.write(latex)
+
+    # compile
+    os.system(f'pdflatex {fname_input}')
+    os.system(f'pdfcrop {fname_base}.pdf {fname_base}.pdf')
+    os.system(f'cp {fname_base}.pdf {cwd}')
+ 
+    # convert to svg
+    if svg:
+        os.system(f'pdf2svg {fname_base}.pdf {fname_base}.svg')
+        os.system(f'cp {fname_base}.svg {cwd}')
+
+    # move back
+    os.chdir(cwd)
