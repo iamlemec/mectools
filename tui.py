@@ -53,3 +53,59 @@ def bar(data, ymin=None, ymax=None, height=20, zero=None):
 
     # transpose and join
     return '\n'.join(''.join(row) for row in zip(*cols))
+
+# evenly space strings
+def spaced_strings(texts, width):
+    # get string centers
+    num = len(texts)
+    lens = torch.tensor([len(s) for s in texts])
+
+    # get location span
+    loc1 = (torch.linspace(0, width, num) - lens / 2).round().long()
+    loc2 = loc1 + lens
+
+    # handle overhang
+    over = (-loc1).clamp(min=0) - (loc2 - width).clamp(min=0)
+    loc1 += over
+    loc2 += over
+
+    # construct strings
+    line = [' ' for _ in range(width)]
+    for s, i1, i2 in zip(texts, loc1.tolist(), loc2.tolist()):
+        for k, i in enumerate(range(i1, i2)):
+            line[i] = s[k]
+
+    return ''.join(line)
+
+def label_format(x):
+    if x % 1.0 == 0:
+        return f'{round(x):d}'
+    else:
+        return f'{x:.2f}'
+
+def hist(data, bins=10, vmin=None, vmax=None, drop=False, **kwargs):
+    # convert to torch
+    data = torch.as_tensor(data, dtype=torch.float32)
+
+    # get bounds
+    vmin = data.min().item() if vmin is None else vmin
+    vmax = data.max().item() if vmax is None else vmax
+
+    # construct histogram
+    hist = torch.histc(data, bins=bins, min=vmin, max=vmax)
+
+    # add under/overflow
+    if not drop:
+        hist[ 0] += (data < vmin).sum().item()
+        hist[-1] += (data > vmax).sum().item()
+
+    # construct histogram
+    plot = bar(hist, **kwargs)
+
+    # add x-axis labels
+    nlabs = max(2, bins // 15)
+    xlocs = torch.linspace(vmin, vmax, nlabs)
+    labels = [label_format(x) for x in xlocs.tolist()]
+    axis = spaced_strings(labels, bins)
+
+    return plot + '\n' + axis
