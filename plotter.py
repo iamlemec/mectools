@@ -4,9 +4,11 @@ import matplotlib as mpl
 import matplotlib.style
 
 # patcher loader for matplotlib
-def plotter(backend='svg', theme=['clean'], pyplot=True, rc={}):
-    mpl.use(backend)
-    mpl.style.use(theme)
+def plotter(backend=None, theme=['clean'], pyplot=True, rc={}):
+    if backend is not None:
+        mpl.use(backend)
+    if theme is not None:
+        mpl.style.use(theme)
     mpl.rcParams.update(rc)
     mpl.interactive(True)
 
@@ -22,4 +24,3 @@ def plotter(backend='svg', theme=['clean'], pyplot=True, rc={}):
     if pyplot:
         import matplotlib.pyplot as plt
         return plt
-

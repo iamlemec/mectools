@@ -1,5 +1,8 @@
 import re
 from itertools import islice
+from operator import or_
+from functools import reduce
+from io import StringIO
 
 # print iterator progress
 def progress(it, per=100, limit=None, fmt='%s'):
@@ -47,11 +50,7 @@ def ichunks(n, size=100):
 
 # merge dictionaries
 def merge(*ds, **kw):
-    ret = {}
-    for d in ds + (kw,):
-        for k, v in d.items():
-            ret[k] = v
-    return ret
+    return reduce(or_, ds + (kw,))
 
 # file sorting tool
 def atoi(text):
@@ -67,3 +66,12 @@ def natural_keys(text):
 
 def natural_sort(text):
     return sorted(text, key=natural_keys)
+
+def paste_table():
+    import clipboard
+    import pandas as pd
+
+    buf = StringIO(clipboard.paste())
+    df = pd.read_table(buf, sep='\t')
+
+    return df
