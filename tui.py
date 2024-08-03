@@ -1,9 +1,12 @@
 # terminal plotting
 
-from math import ceil
+from math import ceil, isnan, isinf
 import torch
+import rich
+import rich.panel
 
 # unicode block characters (one eighth increments)
+empty, full = 0x00020, 0x02588
 upper_blocks = [0x00020, 0x02594, 0x1FB82, 0x1FB83, 0x02580, 0x1FB84, 0x1FB85, 0x1FB86, 0x02588]
 lower_blocks = [0x00020, 0x02581, 0x02582, 0x02583, 0x02584, 0x02585, 0x02586, 0x02587, 0x02588]
 
@@ -11,6 +14,16 @@ def clamp(x, lo, hi):
     return max(lo, min(hi, x))
 
 def block_code(x, zero, height):
+    # check for null or inf
+    if isnan(height):
+        return empty
+    elif isinf(height):
+        if height > zero:
+            return full if x >= zero else empty
+        else:
+            return full if x < zero else empty
+
+    # get block index
     if height >= zero:
         index8 = round(8 * clamp(height - x, 0, 1)) if x >= zero else 0
         blocks = lower_blocks
@@ -18,10 +31,18 @@ def block_code(x, zero, height):
         # we use (x+1) because that's the top of the block
         index8 = round(8 * clamp((x+1) - height, 0, 1)) if x < zero else 0
         blocks = upper_blocks
+
+    # return block
     return blocks[index8]
 
 def block_char(x, zero, height):
     return chr(block_code(x, zero, height))
+
+def nanmax(x):
+    return torch.max(x[x.isfinite()]).item()
+
+def nanmin(x):
+    return torch.min(x[x.isfinite()]).item()
 
 def bar(data, ymin=None, ymax=None, height=20, zero=None):
     # convert to torch
@@ -29,8 +50,8 @@ def bar(data, ymin=None, ymax=None, height=20, zero=None):
     width = data.numel()
 
     # get bounds
-    ymin = data.min().item() if ymin is None else ymin
-    ymax = data.max().item() if ymax is None else ymax
+    ymin = nanmin(data) if ymin is None else ymin
+    ymax = nanmax(data) if ymax is None else ymax
     zero = ymin if zero is None else zero
 
     # scale data
@@ -78,18 +99,29 @@ def spaced_strings(texts, width):
     return ''.join(line)
 
 def label_format(x):
-    if x % 1.0 == 0:
+    ax = abs(x)
+    isint = x % 1.0 == 0
+    if isint or ax > 10:
+        digits = 0
+    elif ax > 1:
+        digits = 1
+    else: # ax < 1
+        digits = 2
+    if isint:
         return f'{round(x):d}'
     else:
-        return f'{x:.2f}'
+        return f'{round(x, digits):.{digits}f}'
 
-def hist(data, bins=10, vmin=None, vmax=None, drop=False, **kwargs):
+def hist(
+    data, bins=10, vmin=None, vmax=None, drop=False, labels=None,
+    fancy=True, log=False, title='histogram', **kwargs
+):
     # convert to torch
     data = torch.as_tensor(data, dtype=torch.float32)
 
     # get bounds
-    vmin = data.min().item() if vmin is None else vmin
-    vmax = data.max().item() if vmax is None else vmax
+    vmin = nanmin(data) if vmin is None else vmin
+    vmax = nanmax(data) if vmax is None else vmax
 
     # construct histogram
     hist = torch.histc(data, bins=bins, min=vmin, max=vmax)
@@ -99,13 +131,23 @@ def hist(data, bins=10, vmin=None, vmax=None, drop=False, **kwargs):
         hist[ 0] += (data < vmin).sum().item()
         hist[-1] += (data > vmax).sum().item()
 
+    # apply log scale
+    if log:
+        hist = torch.where(hist > 0, hist.log10(), torch.nan)
+
     # construct histogram
     plot = bar(hist, **kwargs)
 
     # add x-axis labels
-    nlabs = max(2, bins // 15)
-    xlocs = torch.linspace(vmin, vmax, nlabs)
-    labels = [label_format(x) for x in xlocs.tolist()]
-    axis = spaced_strings(labels, bins)
+    if labels is not False:
+        nlabs = max(2, bins // 15) if labels is None else labels
+        xlocs = torch.linspace(vmin, vmax, nlabs)
+        labels = [label_format(x) for x in xlocs.tolist()]
+        axis = spaced_strings(labels, bins)
+        plot = plot + '\n' + axis
 
-    return plot + '\n' + axis
+    # use rich if fancy
+    if fancy:
+        return rich.panel.Panel(plot, expand=False, title=title)
+    else:
+        return plot
