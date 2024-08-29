@@ -1,9 +1,11 @@
 # terminal plotting
 
 from math import ceil, isnan, isinf
-import torch
+
 import rich
 import rich.panel
+import pandas as pd
+import torch
 
 # unicode block characters (one eighth increments)
 empty, full = 0x00020, 0x02588
@@ -44,10 +46,25 @@ def nanmax(x):
 def nanmin(x):
     return torch.min(x[x.isfinite()]).item()
 
-def bar(data, ymin=None, ymax=None, height=20, zero=None):
+def bar(inputs, ymin=None, ymax=None, height=20, zero=None, labels=None, fancy=True, title=None):
+    # handle pandas series
+    if isinstance(inputs, pd.Series):
+        title = title if title is not None else str(inputs.name)
+        inputs = list(zip(inputs.index, inputs.values))
+
     # convert to torch
-    data = torch.as_tensor(data)
-    width = data.numel()
+    inputs = torch.as_tensor(inputs)
+
+    # check data format
+    if inputs.ndim == 1:
+        index, data = torch.arange(inputs.numel()), inputs
+    elif inputs.ndim == 2 and inputs.shape[1] == 2:
+        index, data = inputs[:, 0], inputs[:, 1]
+    else:
+        raise ValueError('inputs must be 1D tensor or 2D tensor with 2 columns')
+
+    # get data bounds
+    width = index.numel()
 
     # get bounds
     ymin = nanmin(data) if ymin is None else ymin
@@ -73,7 +90,22 @@ def bar(data, ymin=None, ymax=None, height=20, zero=None):
     ]
 
     # transpose and join
-    return '\n'.join(''.join(row) for row in zip(*cols))
+    plot = '\n'.join(''.join(row) for row in zip(*cols))
+
+    # add x-axis labels
+    if labels is not False:
+        nlabs = max(2, width // 15) if labels is None else labels
+        xlocs = torch.linspace(0, width-1, nlabs).round().long()
+        labels = [label_format(x) for x in index[xlocs].tolist()]
+        axis = spaced_strings(labels, width-1)
+        plot = plot + '\n' + axis
+
+    # use rich if fancy
+    if fancy:
+        return rich.panel.Panel(plot, expand=False, title=title)
+    else:
+        return plot
+
 
 # evenly space strings
 def spaced_strings(texts, width):
@@ -135,19 +167,11 @@ def hist(
     if log:
         hist = torch.where(hist > 0, hist.log10(), torch.nan)
 
-    # construct histogram
-    plot = bar(hist, **kwargs)
-
-    # add x-axis labels
+    # make labels
     if labels is not False:
         nlabs = max(2, bins // 15) if labels is None else labels
-        xlocs = torch.linspace(vmin, vmax, nlabs)
-        labels = [label_format(x) for x in xlocs.tolist()]
-        axis = spaced_strings(labels, bins)
-        plot = plot + '\n' + axis
+        xlocs = torch.linspace(vmin, vmax, bins, device=hist.device)
+        hist = torch.stack([xlocs, hist], dim=1)
 
-    # use rich if fancy
-    if fancy:
-        return rich.panel.Panel(plot, expand=False, title=title)
-    else:
-        return plot
+    # construct histogram
+    return bar(hist, **kwargs)

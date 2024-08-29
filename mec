@@ -25,13 +25,13 @@ with open(data_path) as fid:
 def is_running(unit):
     return os.system(cmd_stat.format(unit=unit)) == 0
 
-def dispatch(func, unit):
+def dispatch(func, unit, *args):
     if unit is None:
         for u in specs:
             func(u)
     else:
         if unit in specs:
-            func(unit)
+            func(unit, *args)
         else:
             print(f'{unit}: not found')
 
@@ -56,7 +56,7 @@ def do_stat(unit):
     else:
         print(f'{unit}: not running')
 
-def do_start(unit):
+def do_start(unit, *args):
     info = specs[unit]
     if is_running(unit):
         print(f'{unit}: already running')
@@ -67,11 +67,12 @@ def do_start(unit):
         return
     if 'env' in info:
         os.environ.update(info['env'])
-    print(f'{unit}: starting')
+    print(f'{unit}: starting with args = {args}')
     shell = info.get('shell', True)
     cmd = cmd_shell if shell else cmd_start
+    cmd0 = ' '.join([info['cmd'], *args])
     os.chdir(pwd)
-    os.system(cmd.format(unit=unit, cmd=info['cmd']))
+    os.system(cmd.format(unit=unit, cmd=cmd0))
     os.chdir(base_dir)
 
 def do_kill(unit):
@@ -81,10 +82,10 @@ def do_kill(unit):
         print(f'{unit}: killing')
         os.system(cmd_kill.format(unit=unit))
 
-def do_restart(unit):
+def do_restart(unit, *args):
     if is_running(unit):
         do_kill(unit)
-    do_start(unit)
+    do_start(unit, *args)
 
 # interface
 @click.group()
@@ -110,10 +111,11 @@ def stat(unit):
 def status(unit):
     dispatch(do_stat, unit)
 
-@cli.command()
+@cli.command(context_settings=dict(ignore_unknown_options=True))
 @click.argument('unit', required=False)
-def start(unit):
-    dispatch(do_start, unit)
+@click.argument('args', nargs=-1, type=click.UNPROCESSED)
+def start(unit, args):
+    dispatch(do_start, unit, *args)
 
 @cli.command()
 @click.argument('unit', required=False)
